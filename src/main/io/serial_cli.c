@@ -81,6 +81,8 @@
 #include "config/config_profile.h"
 #include "config/config_master.h"
 
+#include "drivers/serial_escserial.h"
+
 #include "common/printf.h"
 
 #include "serial_cli.h"
@@ -120,6 +122,9 @@ static void cliVersion(char *cmdline);
 
 #ifdef GPS
 static void cliGpsPassthrough(char *cmdline);
+#endif
+#ifdef USE_ESCSERIAL
+static void cliEscPassthrough(char *cmdline);
 #endif
 
 static void cliHelp(char *cmdline);
@@ -236,6 +241,9 @@ const clicmd_t cmdTable[] = {
             "[name]", cliGet),
 #ifdef GPS
     CLI_COMMAND_DEF("gpspassthrough", "passthrough gps to serial", NULL, cliGpsPassthrough),
+#endif
+#ifdef USE_ESCSERIAL
+    CLI_COMMAND_DEF("escprog", "passthrough esc to serial", "<mode [sk/bl]> <index>", cliEscPassthrough),
 #endif
     CLI_COMMAND_DEF("help", NULL, NULL, cliHelp),
 #ifdef LED_STRIP
@@ -1538,6 +1546,57 @@ static void cliGpsPassthrough(char *cmdline)
     gpsEnablePassthrough(cliPort);
 }
 #endif
+
+#ifdef USE_ESCSERIAL
+static void cliEscPassthrough(char *cmdline)
+{
+    uint8_t mode = 0;
+    int index = 0;
+    int i = 0;
+    char *pch = NULL;
+    char *saveptr;
+
+    if (isEmpty(cmdline)) {
+        cliShowParseError();
+        return;
+    }
+
+    pch = strtok_r(cmdline, " ", &saveptr);
+    while (pch != NULL) {
+        switch (i) {
+            case 0:
+            	if(strncasecmp(pch, "sk", strlen(pch)) == 0)
+            	{
+            		mode = 0;
+            	}
+            	else if(strncasecmp(pch, "bl", strlen(pch)) == 0)
+            	{
+            		mode = 1;
+            	}
+            	else
+            	{
+                    cliShowParseError();
+                    return;
+            	}
+                break;
+            case 1:
+            	index = atoi(pch);
+                if ((index >= 0) && (index < USABLE_TIMER_CHANNEL_COUNT)) {
+                    printf("passthru at pwm output %d enabled\r\n", index);
+                }
+                else {
+                    printf("invalid pwm output, valid range: 0 to %d\r\n", USABLE_TIMER_CHANNEL_COUNT);
+                    return;
+                }
+                break;
+        }
+        i++;
+        pch = strtok_r(NULL, " ", &saveptr);
+    }
+    escEnablePassthrough(cliPort,index,mode);
+}
+#endif
+
 
 static void cliHelp(char *cmdline)
 {

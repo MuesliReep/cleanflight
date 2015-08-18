@@ -559,6 +559,7 @@ ANYFC_SRC = startup_stm32f40xx.s \
 		   drivers/pwm_output.c \
 		   drivers/pwm_rx.c \
 		   drivers/serial_softserial.c \
+		   drivers/serial_escserial.c \
 		   drivers/serial_uart.c \
 		   drivers/serial_uart_stm32f4xx.c \
 		   drivers/sound_beeper_stm32f4xx.c \
@@ -587,6 +588,7 @@ COLIBRI_SRC = startup_stm32f40xx.s \
 		   drivers/pwm_output.c \
 		   drivers/pwm_rx.c \
 		   drivers/serial_softserial.c \
+		   drivers/serial_escserial.c \
 		   drivers/serial_uart.c \
 		   drivers/serial_uart_stm32f4xx.c \
 		   drivers/sound_beeper_stm32f4xx.c \
@@ -617,6 +619,7 @@ REVO_SRC = startup_stm32f40xx.s \
 		   drivers/pwm_output.c \
 		   drivers/pwm_rx.c \
 		   drivers/serial_softserial.c \
+		   drivers/serial_escserial.c \
 		   drivers/serial_uart.c \
 		   drivers/serial_uart_stm32f4xx.c \
 		   drivers/sound_beeper_stm32f4xx.c \
@@ -828,6 +831,11 @@ flash_$(TARGET): $(TARGET_HEX)
 	stm32flash -w $(TARGET_HEX) -v -g 0x0 -b 115200 $(SERIAL_DEVICE)
 
 flash: flash_$(TARGET)
+
+st-flash_$(TARGET): $(TARGET_BIN)
+	st-flash --reset write $< 0x08000000
+
+st-flash: st-flash_$(TARGET)
 
 binary: $(TARGET_BIN)
 
