@@ -13,35 +13,19 @@
  *
  * You should have received a copy of the GNU General Public License
  * along with Cleanflight.  If not, see <http://www.gnu.org/licenses/>.
+ *
+ * Ported from https://github.com/4712/BLHeliSuite/blob/master/Interfaces/Arduino1Wire/Source/Arduino1Wire_C/Arduino1Wire.c
+ *  by Nathan Tsoi <nathan@vertile.com>
  */
 
 #pragma once
 
-#define MAG
-#define BARO
-#define GPS
-#define TELEMETRY
-#define LED_STRIP
-#define USE_SERVOS
+#ifdef USE_SERIAL_1WIRE
 
-#define SERIAL_PORT_COUNT 4
+typedef struct {
+  GPIO_TypeDef* gpio;
+  uint32_t pinpos;
+} escHardware_t;
 
-#define MAX_SIMULTANEOUS_ADJUSTMENT_COUNT 6
-
-typedef enum
-{
-    Mode_TEST = 0x0,
-    Mode_Out_PP = 0x10,
-} GPIO_Mode;
-
-typedef struct
-{
-    void* test;
-} GPIO_TypeDef;
-
-typedef struct
-{
-    void* test;
-} TIM_TypeDef;
-
-typedef enum {DISABLE = 0, ENABLE = !DISABLE} FunctionalState;
+void usb1WirePassthrough(int8_t escIndex);
+#endif

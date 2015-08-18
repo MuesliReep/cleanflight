@@ -48,9 +48,9 @@ OPBL_VALID_TARGETS = CC3D
 ifeq ($(FLASH_SIZE),)
 ifeq ($(TARGET),$(filter $(TARGET),CJMCU))
 FLASH_SIZE = 64
-else ifeq ($(TARGET),$(filter $(TARGET),NAZE CC3D ALIENWIIF1 SPRACINGF3 OLIMEXINO))
+else ifeq ($(TARGET),$(filter $(TARGET),NAZE CC3D ALIENWIIF1 OLIMEXINO))
 FLASH_SIZE = 128
-else ifeq ($(TARGET),$(filter $(TARGET),EUSTM32F103RC PORT103R STM32F3DISCOVERY CHEBUZZF3 NAZE32PRO SPARKY ALIENWIIF3))
+else ifeq ($(TARGET),$(filter $(TARGET),EUSTM32F103RC PORT103R STM32F3DISCOVERY CHEBUZZF3 NAZE32PRO SPRACINGF3 SPARKY ALIENWIIF3))
 FLASH_SIZE = 256
 else ifeq ($(TARGET),$(filter $(TARGET),ANYFC REVO COLIBRI))
 FLASH_SIZE = 256
@@ -308,10 +308,12 @@ COMMON_SRC	 = build_config.c \
 		   drivers/serial.c \
 		   drivers/sound_beeper.c \
 		   drivers/system.c \
+		   drivers/gyro_sync.c \
 		   io/beeper.c \
 		   io/rc_controls.c \
 		   io/rc_curves.c \
 		   io/serial.c \
+		   io/serial_1wire.c \
 		   io/serial_cli.c \
 		   io/serial_msp.c \
 		   io/statusindicator.c \
@@ -379,6 +381,7 @@ NAZE_SRC	 = startup_stm32f10x_md_gcc.S \
 		   drivers/adc.c \
 		   drivers/adc_stm32f10x.c \
 		   drivers/barometer_bmp085.c \
+		   drivers/barometer_bmp280.c \
 		   drivers/barometer_ms5611.c \
 		   drivers/bus_spi.c \
 		   drivers/bus_i2c_stm32f10x.c \
@@ -420,6 +423,7 @@ EUSTM32F103RC_SRC	 = startup_stm32f10x_hd_gcc.S \
 		   drivers/adc.c \
 		   drivers/adc_stm32f10x.c \
 		   drivers/barometer_bmp085.c \
+		   drivers/barometer_bmp280.c \
 		   drivers/barometer_ms5611.c \
 		   drivers/bus_i2c_stm32f10x.c \
 		   drivers/bus_spi.c \
@@ -454,6 +458,7 @@ OLIMEXINO_SRC	 = startup_stm32f10x_md_gcc.S \
 		   drivers/adc.c \
 		   drivers/adc_stm32f10x.c \
 		   drivers/barometer_bmp085.c \
+		   drivers/barometer_bmp280.c \
 		   drivers/bus_i2c_stm32f10x.c \
 		   drivers/bus_spi.c \
 		   drivers/compass_hmc5883l.c \
@@ -514,6 +519,7 @@ CC3D_SRC	 = \
 		   drivers/adc.c \
 		   drivers/adc_stm32f10x.c \
 		   drivers/barometer_bmp085.c \
+		   drivers/barometer_bmp280.c \
 		   drivers/barometer_ms5611.c \
 		   drivers/bus_spi.c \
 		   drivers/bus_i2c_stm32f10x.c \
@@ -675,6 +681,7 @@ STM32F3DISCOVERY_SRC	 = \
 		   drivers/accgyro_mpu6050.c \
 		   drivers/accgyro_l3g4200d.c \
 		   drivers/barometer_ms5611.c \
+		   drivers/barometer_bmp280.c \
 		   drivers/compass_ak8975.c \
 		   $(HIGHEND_SRC) \
 		   $(COMMON_SRC)
@@ -689,6 +696,7 @@ SPARKY_SRC	 = \
 		   drivers/display_ug2864hsweg01.c \
 		   drivers/accgyro_mpu6050.c \
 		   drivers/barometer_ms5611.c \
+		   drivers/barometer_bmp280.c \
 		   drivers/compass_ak8975.c \
 		   drivers/serial_usb_vcp.c \
 		   $(HIGHEND_SRC) \
@@ -702,6 +710,7 @@ SPRACINGF3_SRC	 = \
 		   drivers/accgyro_mpu6050.c \
 		   drivers/barometer_ms5611.c \
 		   drivers/compass_ak8975.c \
+		   drivers/barometer_bmp280.c \
 		   drivers/compass_hmc5883l.c \
 		   drivers/display_ug2864hsweg01.h \
 		   drivers/flash_m25p16.c \

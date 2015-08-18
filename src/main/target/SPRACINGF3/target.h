@@ -49,6 +49,7 @@
 
 #define BARO
 #define USE_BARO_MS5611
+#define USE_BARO_BMP280
 
 #define MAG
 #define USE_MAG_AK8975
@@ -169,3 +170,10 @@
 // USART3,
 #define BIND_PORT  GPIOB
 #define BIND_PIN   Pin_11
+
+#define USE_SERIAL_1WIRE
+#define ESC_COUNT 8
+#define S1W_TX_GPIO         GPIOA
+#define S1W_TX_PIN          GPIO_Pin_9
+#define S1W_RX_GPIO         GPIOA
+#define S1W_RX_PIN          GPIO_Pin_10

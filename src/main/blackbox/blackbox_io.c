@@ -22,6 +22,7 @@
 #include "drivers/accgyro.h"
 #include "drivers/light_led.h"
 #include "drivers/sound_beeper.h"
+#include "drivers/gyro_sync.h"
 
 #include "sensors/sensors.h"
 #include "sensors/boardalignment.h"
@@ -153,6 +154,20 @@ void blackboxWriteSignedVB(int32_t value)
 {
     //ZigZag encode to make the value always positive
     blackboxWriteUnsignedVB(zigzagEncode(value));
+}
+
+void blackboxWriteSignedVBArray(int32_t *array, int count)
+{
+    for (int i = 0; i < count; i++) {
+        blackboxWriteSignedVB(array[i]);
+    }
+}
+
+void blackboxWriteSigned16VBArray(int16_t *array, int count)
+{
+    for (int i = 0; i < count; i++) {
+        blackboxWriteSignedVB(array[i]);
+    }
 }
 
 void blackboxWriteS16(int16_t value)
@@ -457,7 +472,7 @@ bool blackboxDeviceOpen(void)
      *
      * 9 / 1250 = 7200 / 1000000
      */
-    blackboxWriteChunkSize = MAX((masterConfig.looptime * 9) / 1250, 4);
+    blackboxWriteChunkSize = MAX((targetLooptime * 9) / 1250, 4);
 
     switch (masterConfig.blackbox_device) {
         case BLACKBOX_DEVICE_SERIAL:

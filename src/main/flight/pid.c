@@ -110,7 +110,7 @@ static void pidLuxFloat(pidProfile_t *pidProfile, controlRateConfig_t *controlRa
     float RateError, errorAngle, AngleRate, gyroRate;
     float ITerm,PTerm,DTerm;
     int32_t stickPosAil, stickPosEle, mostDeflectedPos;
-    static float lastError[3],lastGyroRate[3];
+    static float lastError[3];
     static float delta1[3], delta2[3];
     float delta, deltaSum;
     int axis;
@@ -199,15 +199,8 @@ static void pidLuxFloat(pidProfile_t *pidProfile, controlRateConfig_t *controlRa
         ITerm = errorGyroIf[axis];
 
         //-----calculate D-term
-        // Delta 2 approaches for testing/comparing purposes
-        if (pidProfile->old_delta) {
-            delta = gyroRate - lastGyroRate[axis];
-            lastGyroRate[axis] = gyroRate;
-        }
-        else {
-            delta = RateError - lastError[axis];
-            lastError[axis] = RateError;
-        }
+        delta = RateError - lastError[axis];
+        lastError[axis] = RateError;
 
         // Correct difference by cycle time. Cycle time is jittery (can be different 2 times), so calculated difference
         // would be scaled by different dt each time. Division by dT fixes that.
@@ -225,22 +218,12 @@ static void pidLuxFloat(pidProfile_t *pidProfile, controlRateConfig_t *controlRa
         DTerm = constrainf((deltaSum / 3.0f) * pidProfile->D_f[axis] * PIDweight[axis] / 100, -300.0f, 300.0f);
 
         // -----calculate total PID output
-        if (pidProfile->old_delta) {
-        	axisPID[axis] = constrain(lrintf(PTerm + ITerm - DTerm), -1000, 1000);
-        }
-        else {
-            axisPID[axis] = constrain(lrintf(PTerm + ITerm + DTerm), -1000, 1000);
-        }
+        axisPID[axis] = constrain(lrintf(PTerm + ITerm + DTerm), -1000, 1000);
 
 #ifdef BLACKBOX
         axisPID_P[axis] = PTerm;
         axisPID_I[axis] = ITerm;
-        if (pidProfile->old_delta) {
-            axisPID_D[axis] = -DTerm;
-        }
-        else {
-            axisPID_D[axis] = DTerm;
-        }
+        axisPID_D[axis] = DTerm;
 #endif
     }
 }

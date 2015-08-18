@@ -240,3 +240,4 @@ void processRcAdjustments(controlRateConfig_t *controlRateConfig, rxConfig_t *rx
 bool isUsingSticksForArming(void);
 
 int32_t getRcStickDeflection(int32_t axis, uint16_t midrc);
+bool isModeActivationConditionPresent(modeActivationCondition_t *modeActivationConditions, boxId_e modeId);

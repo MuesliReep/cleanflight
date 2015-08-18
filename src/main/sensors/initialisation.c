@@ -38,9 +38,11 @@
 
 #include "drivers/accgyro_spi_mpu6000.h"
 #include "drivers/accgyro_spi_mpu6500.h"
+#include "drivers/gyro_sync.h"
 
 #include "drivers/barometer.h"
 #include "drivers/barometer_bmp085.h"
+#include "drivers/barometer_bmp280.h"
 #include "drivers/barometer_ms5611.h"
 
 #include "drivers/pitotmeter.h"
@@ -408,12 +410,12 @@ retry:
     sensorsSet(SENSOR_ACC);
 }
 
-static void detectBaro()
+static void detectBaro(baroSensor_e baroHardwareToUse)
 {
 #ifdef BARO
     // Detect what pressure sensors are available. baro->update() is set to sensor-specific update function
 
-    baroSensor_e baroHardware = BARO_DEFAULT;
+    baroSensor_e baroHardware = baroHardwareToUse;
 
 #ifdef USE_BARO_BMP085
 
@@ -454,6 +456,14 @@ static void detectBaro()
 #ifdef USE_BARO_BMP085
             if (bmp085Detect(bmp085Config, &baro)) {
                 baroHardware = BARO_BMP085;
+                break;
+            }
+#endif
+	    ; // fallthough
+        case BARO_BMP280:
+#ifdef USE_BARO_BMP280
+            if (bmp280Detect(&baro)) {
+                baroHardware = BARO_BMP280;
                 break;
             }
 #endif
@@ -631,7 +641,7 @@ void reconfigureAlignment(sensorAlignmentConfig_t *sensorAlignmentConfig)
     }
 }
 
-bool sensorsAutodetect(sensorAlignmentConfig_t *sensorAlignmentConfig, uint16_t gyroLpf, uint8_t accHardwareToUse, uint8_t magHardwareToUse, int16_t magDeclinationFromConfig)
+bool sensorsAutodetect(sensorAlignmentConfig_t *sensorAlignmentConfig, uint16_t gyroLpf, uint8_t accHardwareToUse, uint8_t magHardwareToUse, uint8_t baroHardwareToUse, int16_t magDeclinationFromConfig, uint32_t looptime, uint8_t syncGyroToLoop)
 {
     int16_t deg, min;
 
@@ -642,7 +652,7 @@ bool sensorsAutodetect(sensorAlignmentConfig_t *sensorAlignmentConfig, uint16_t 
         return false;
     }
     detectAcc(accHardwareToUse);
-    detectBaro();
+    detectBaro(baroHardwareToUse);
     detectPitot();
 
 
@@ -650,6 +660,7 @@ bool sensorsAutodetect(sensorAlignmentConfig_t *sensorAlignmentConfig, uint16_t 
     if (sensors(SENSOR_ACC))
         acc.init();
     // this is safe because either mpu6050 or mpu3050 or lg3d20 sets it, and in case of fail, we never get here.
+    gyroUpdateSampleRate(looptime, gyroLpf, syncGyroToLoop);  // Set gyro refresh rate before initialisation
     gyro.init();
 
     detectMag(magHardwareToUse);

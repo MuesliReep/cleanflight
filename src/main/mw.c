@@ -37,6 +37,7 @@
 #include "drivers/serial.h"
 #include "drivers/timer.h"
 #include "drivers/pwm_rx.h"
+#include "drivers/gyro_sync.h"
 
 #include "sensors/sensors.h"
 #include "sensors/boardalignment.h"
@@ -88,8 +89,12 @@ enum {
     ALIGN_MAG = 2
 };
 
-/* for VBAT monitoring frequency */
-#define VBATFREQ 6        // to read battery voltage - nth number of loop iterations
+/* VBAT monitoring interval (in microseconds) - 1s*/
+#define VBATINTERVAL (6 * 3500)       
+/* IBat monitoring interval (in microseconds) - 6 default looptimes */
+#define IBATINTERVAL (6 * 3500)
+#define GYRO_WATCHDOG_DELAY 500  // Watchdog for boards without interrupt for gyro
+#define LOOP_DEADBAND 400 // Dead band for loop to modify to rcInterpolationFactor in RC Filtering for unstable looptimes
 #define LOOP_DEADBAND 400 // Dead band for loop to modify to rcInterpolationFactor in RC Filtering for unstable looptimes
 
 uint32_t currentTime = 0;
@@ -178,10 +183,8 @@ void annexCode(void)
     int32_t tmp, tmp2;
     int32_t axis, prop1 = 0, prop2;
 
-    static batteryState_e batteryState = BATTERY_OK;
-    static uint8_t vbatTimer = 0;
-    static int32_t vbatCycleTime = 0;
-
+    static uint32_t vbatLastServiced = 0;
+    static uint32_t ibatLastServiced = 0;
     // PITCH & ROLL only dynamic PID adjustment,  depending on throttle value
     if (rcData[THROTTLE] < currentControlRateProfile->tpa_breakpoint) {
         prop2 = 100;
@@ -251,24 +254,19 @@ void annexCode(void)
         rcCommand[PITCH] = rcCommand_PITCH;
     }
 
-    if (feature(FEATURE_VBAT | FEATURE_CURRENT_METER)) {
-        vbatCycleTime += cycleTime;
-        if (!(++vbatTimer % VBATFREQ)) {
+    if (feature(FEATURE_VBAT)) {
+        if ((int32_t)(currentTime - vbatLastServiced) >= VBATINTERVAL) {
+            vbatLastServiced = currentTime;
+            updateBattery();
+        }
+    }
 
-            if (feature(FEATURE_VBAT)) {
-                updateBatteryVoltage();
-                batteryState = calculateBatteryState();
-                //handle beepers for battery levels
-                if (batteryState == BATTERY_CRITICAL)
-                    beeper(BEEPER_BAT_CRIT_LOW);    //critically low battery
-                else if (batteryState == BATTERY_WARNING)
-                    beeper(BEEPER_BAT_LOW);         //low battery
-            }
+    if (feature(FEATURE_CURRENT_METER)) {
+        int32_t ibatTimeSinceLastServiced = (int32_t) (currentTime - ibatLastServiced);
 
-            if (feature(FEATURE_CURRENT_METER)) {
-                updateCurrentMeter(vbatCycleTime, &masterConfig.rxConfig, masterConfig.flight3DConfig.deadband3d_throttle);
-            }
-            vbatCycleTime = 0;
+        if (ibatTimeSinceLastServiced >= IBATINTERVAL) {
+            ibatLastServiced = currentTime;
+            updateCurrentMeter((ibatTimeSinceLastServiced / 1000), &masterConfig.rxConfig, masterConfig.flight3DConfig.deadband3d_throttle);
         }
     }
 
@@ -714,24 +712,17 @@ void processRx(void)
 // Gyro Low Pass
 void filterGyro(void) {
     int axis;
+    static float dTGyro;
     static filterStatePt1_t gyroADCState[XYZ_AXIS_COUNT];
 
+    if (!dTGyro) {
+        dTGyro = (float)targetLooptime * 0.000001f;
+    }
+
     for (axis = 0; axis < XYZ_AXIS_COUNT; axis++) {
-    	if (masterConfig.looptime > 0) {
-    		// Static dT calculation based on configured looptime
-            if (!gyroADCState[axis].constdT) {
-                gyroADCState[axis].constdT = (float)masterConfig.looptime * 0.000001f;
-            }
-
-            gyroADC[axis] = filterApplyPt1(gyroADC[axis], &gyroADCState[axis], currentProfile->pidProfile.gyro_cut_hz, gyroADCState[axis].constdT);
-    	}
-
-        else {
-	        gyroADC[axis] = filterApplyPt1(gyroADC[axis], &gyroADCState[axis], currentProfile->pidProfile.gyro_cut_hz, dT);
-        }
+        gyroADC[axis] = filterApplyPt1(gyroADC[axis], &gyroADCState[axis], currentProfile->pidProfile.gyro_cut_hz, dTGyro);
     }
 }
-
 void getArmingChannel(modeActivationCondition_t *modeActivationConditions, uint8_t *armingChannel) {
     for (int index = 0; index < MAX_MODE_ACTIVATION_CONDITION_COUNT; index++) {
         modeActivationCondition_t *modeActivationCondition = &modeActivationConditions[index];
@@ -838,6 +829,29 @@ void filterRc(void){
     }
 }
 
+// Function for loop trigger
+bool runLoop(uint32_t loopTime) {
+	bool loopTrigger = false;
+
+    if (masterConfig.syncGyroToLoop) {
+        if (ARMING_FLAG(ARMED)) {
+            if (gyroSyncCheckUpdate() || (int32_t)(currentTime - (loopTime + GYRO_WATCHDOG_DELAY)) >= 0) {
+            	loopTrigger = true;
+            }
+        }
+        // Blheli arming workaround (stable looptime prior to arming)
+        else if (!ARMING_FLAG(ARMED) && ((int32_t)(currentTime - loopTime) >= 0)) {
+        	loopTrigger = true;
+        }
+    }
+
+    else if ((int32_t)(currentTime - loopTime) >= 0){
+    	loopTrigger = true;
+    }
+
+    return loopTrigger;
+}
+
 void loop(void)
 {
     static uint32_t loopTime;
@@ -884,8 +898,9 @@ void loop(void)
     }
 
     currentTime = micros();
-    if (masterConfig.looptime == 0 || (int32_t)(currentTime - loopTime) >= 0) {
-        loopTime = currentTime + masterConfig.looptime;
+    if (runLoop(loopTime)) {
+
+        loopTime = currentTime + targetLooptime;
 
         imuUpdate(&currentProfile->accelerometerTrims);
 
@@ -896,9 +911,12 @@ void loop(void)
 
         dT = (float)cycleTime * 0.000001f;
 
-        // Gyro Low Pass
         if (currentProfile->pidProfile.gyro_cut_hz) {
             filterGyro();
+        }
+
+        if (masterConfig.rcSmoothing) {
+            filterRc();
         }
 
         filterRc();

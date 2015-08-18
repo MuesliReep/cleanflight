@@ -137,7 +137,7 @@ static uint32_t activeFeaturesLatch = 0;
 static uint8_t currentControlRateProfileIndex = 0;
 controlRateConfig_t *currentControlRateProfile;
 
-static const uint8_t EEPROM_CONF_VERSION = 103;
+static const uint8_t EEPROM_CONF_VERSION = 105;
 
 static void resetAccelerometerTrims(flightDynamicsTrims_t *accelerometerTrims)
 {
@@ -183,7 +183,6 @@ static void resetPidProfile(pidProfile_t *pidProfile)
     pidProfile->gyro_cut_hz = 0;
     pidProfile->pterm_cut_hz = 0;
     pidProfile->dterm_cut_hz = 0;
-    pidProfile->old_delta = 0;
 
     pidProfile->P_f[ROLL] = 1.5f;     // new PID with preliminary defaults test carefully
     pidProfile->I_f[ROLL] = 0.4f;
@@ -277,6 +276,8 @@ void resetTelemetryConfig(telemetryConfig_t *telemetryConfig)
 void resetBatteryConfig(batteryConfig_t *batteryConfig)
 {
     batteryConfig->vbatscale = VBAT_SCALE_DEFAULT;
+    batteryConfig->vbatresdivval = VBAT_RESDIVVAL_DEFAULT;
+    batteryConfig->vbatresdivmultiplier = VBAT_RESDIVMULTIPLIER_DEFAULT;
     batteryConfig->vbatmaxcellvoltage = 43;
     batteryConfig->vbatmincellvoltage = 33;
     batteryConfig->vbatwarningcellvoltage = 35;
@@ -419,6 +420,7 @@ static void resetConf(void)
     masterConfig.gyroConfig.gyroMovementCalibrationThreshold = 32;
 
     masterConfig.mag_hardware = MAG_DEFAULT;     // default/autodetect
+    masterConfig.baro_hardware = BARO_DEFAULT;   // default/autodetect
 
     resetBatteryConfig(&masterConfig.batteryConfig);
 
@@ -432,9 +434,18 @@ static void resetConf(void)
     masterConfig.rxConfig.rx_min_usec = 885;          // any of first 4 channels below this value will trigger rx loss detection
     masterConfig.rxConfig.rx_max_usec = 2115;         // any of first 4 channels above this value will trigger rx loss detection
 
+    for (i = 0; i < MAX_AUX_CHANNEL_COUNT; i++) {
+        rxFailsafeChannelConfiguration_t *channelFailsafeConfiguration = &masterConfig.rxConfig.failsafe_aux_channel_configurations[i];
+
+        channelFailsafeConfiguration->mode = RX_FAILSAFE_MODE_HOLD;
+        channelFailsafeConfiguration->step = CHANNEL_VALUE_TO_RXFAIL_STEP(masterConfig.rxConfig.midrc);
+    }
+
     masterConfig.rxConfig.rssi_channel = 0;
     masterConfig.rxConfig.rssi_scale = RSSI_SCALE_DEFAULT;
     masterConfig.rxConfig.rssi_ppm_invert = 0;
+
+    resetAllRxChannelRangeConfigurations(masterConfig.rxConfig.channelRanges);
 
     masterConfig.inputFilteringMode = INPUT_FILTERING_DISABLED;
 
@@ -468,8 +479,10 @@ static void resetConf(void)
 
     resetSerialConfig(&masterConfig.serialConfig);
 
-    masterConfig.looptime = 3500;
+    masterConfig.looptime = 2000;
     masterConfig.emf_avoidance = 0;
+    masterConfig.syncGyroToLoop = 1;
+    masterConfig.rcSmoothing = 1;
 
     resetPidProfile(&currentProfile->pidProfile);
 
@@ -560,6 +573,7 @@ static void resetConf(void)
     masterConfig.escAndServoConfig.maxthrottle = 2000;
     masterConfig.motor_pwm_rate = 32000;
     masterConfig.looptime = 2000;
+    masterConfig.rcSmoothing = 1;
     currentProfile->pidProfile.pidController = 3;
     currentProfile->pidProfile.P8[ROLL] = 36;
     currentProfile->pidProfile.P8[PITCH] = 36;
@@ -1015,4 +1029,3 @@ uint32_t featureMask(void)
 {
     return masterConfig.enabledFeatures;
 }
-
