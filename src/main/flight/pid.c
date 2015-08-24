@@ -149,11 +149,11 @@ static void pidLuxFloat(pidProfile_t *pidProfile, controlRateConfig_t *controlRa
          } else {
             // calculate error and limit the angle to the max inclination
 #ifdef GPS
-            errorAngle = (constrain(rcCommand[axis] + GPS_angle[axis], -((int) max_angle_inclination),
-                    +max_angle_inclination) - inclination.raw[axis] + angleTrim->raw[axis]) / 10.0f; // 16 bits is ok here
+            errorAngle = (constrainf(((float)rcCommand[axis] * ((float)max_angle_inclination / 500.0f)) + GPS_angle[axis], -((int) max_angle_inclination),
+                    +max_angle_inclination) - inclination.raw[axis] + angleTrim->raw[axis]) / 10.0f;
 #else
-            errorAngle = (constrain(rcCommand[axis], -((int) max_angle_inclination),
-                    +max_angle_inclination) - inclination.raw[axis] + angleTrim->raw[axis]) / 10.0f; // 16 bits is ok here
+            errorAngle = (constrainf((float)rcCommand[axis] * ((float)max_angle_inclination / 500.0f), -((int) max_angle_inclination),
+                    +max_angle_inclination) - inclination.raw[axis] + angleTrim->raw[axis]) / 10.0f;
 #endif
 
 #ifdef AUTOTUNE
@@ -188,7 +188,12 @@ static void pidLuxFloat(pidProfile_t *pidProfile, controlRateConfig_t *controlRa
 
         // Pterm low pass
         if (pidProfile->pterm_cut_hz) {
-            PTerm = filterApplyPt1(PTerm, &PTermState[axis], pidProfile->pterm_cut_hz, dT);
+            if (axis == YAW) {
+                PTerm = filterApplyPt1(PTerm, &PTermState[axis], constrain(pidProfile->pterm_cut_hz / YAW_PTERM_CUT_RATIO, 1, pidProfile->pterm_cut_hz), dT);
+            }
+            else {
+                PTerm = filterApplyPt1(PTerm, &PTermState[axis], pidProfile->pterm_cut_hz, dT);
+            }
         }
 
         // -----calculate I component.
@@ -298,7 +303,12 @@ static void pidMultiWii(pidProfile_t *pidProfile, controlRateConfig_t *controlRa
 
         // Pterm low pass
         if (pidProfile->pterm_cut_hz) {
-            PTerm = filterApplyPt1(PTerm, &PTermState[axis], pidProfile->pterm_cut_hz, dT);
+            if (axis == YAW) {
+                PTerm = filterApplyPt1(PTerm, &PTermState[axis], constrain(pidProfile->pterm_cut_hz / YAW_PTERM_CUT_RATIO, 1, pidProfile->pterm_cut_hz), dT);
+            }
+            else {
+                PTerm = filterApplyPt1(PTerm, &PTermState[axis], pidProfile->pterm_cut_hz, dT);
+            }
         }
 
         delta = (gyroADC[axis] - lastGyro[axis]) / 4;
@@ -388,7 +398,12 @@ static void pidMultiWii23(pidProfile_t *pidProfile, controlRateConfig_t *control
 
         // Pterm low pass
         if (pidProfile->pterm_cut_hz) {
-            PTerm = filterApplyPt1(PTerm, &PTermState[axis], pidProfile->pterm_cut_hz, dT);
+            if (axis == YAW) {
+                PTerm = filterApplyPt1(PTerm, &PTermState[axis], constrain(pidProfile->pterm_cut_hz / YAW_PTERM_CUT_RATIO, 1, pidProfile->pterm_cut_hz), dT);
+            }
+            else {
+                PTerm = filterApplyPt1(PTerm, &PTermState[axis], pidProfile->pterm_cut_hz, dT);
+            }
         }
 
         delta = (gyroADC[axis] - lastGyro[axis]) / 4;   // 16 bits is ok here, the dif between 2 consecutive gyro reads is limited to 800
@@ -512,8 +527,14 @@ static void pidMultiWiiHybrid(pidProfile_t *pidProfile, controlRateConfig_t *con
 
         // Pterm low pass
         if (pidProfile->pterm_cut_hz) {
-            PTerm = filterApplyPt1(PTerm, &PTermState[axis], pidProfile->pterm_cut_hz, dT);
+            if (axis == YAW) {
+                PTerm = filterApplyPt1(PTerm, &PTermState[axis], constrain(pidProfile->pterm_cut_hz / YAW_PTERM_CUT_RATIO, 1, pidProfile->pterm_cut_hz), dT);
+            }
+            else {
+                PTerm = filterApplyPt1(PTerm, &PTermState[axis], pidProfile->pterm_cut_hz, dT);
+            }
         }
+
         delta = (gyroADC[axis] - lastGyro[axis]) / 4;
         lastGyro[axis] = gyroADC[axis];
         deltaSum = delta1[axis] + delta2[axis] + delta;
@@ -685,7 +706,7 @@ rollAndPitchTrims_t *angleTrim, rxConfig_t *rxConfig)
 
     // Pterm low pass
     if (pidProfile->pterm_cut_hz) {
-        PTerm = filterApplyPt1(PTerm, &PTermState[axis], pidProfile->pterm_cut_hz, dT);
+        PTerm = filterApplyPt1(PTerm, &PTermState[axis], constrain(pidProfile->pterm_cut_hz / YAW_PTERM_CUT_RATIO, 1, pidProfile->pterm_cut_hz), dT);
     }
 
     axisPID[FD_YAW] = PTerm + ITerm;
@@ -780,7 +801,12 @@ static void pidRewrite(pidProfile_t *pidProfile, controlRateConfig_t *controlRat
 
         // Pterm low pass
         if (pidProfile->pterm_cut_hz) {
-            PTerm = filterApplyPt1(PTerm, &PTermState[axis], pidProfile->pterm_cut_hz, dT);
+            if (axis == YAW) {
+                PTerm = filterApplyPt1(PTerm, &PTermState[axis], constrain(pidProfile->pterm_cut_hz / YAW_PTERM_CUT_RATIO, 1, pidProfile->pterm_cut_hz), dT);
+            }
+            else {
+                PTerm = filterApplyPt1(PTerm, &PTermState[axis], pidProfile->pterm_cut_hz, dT);
+            }
         }
 
         // -----calculate I component
