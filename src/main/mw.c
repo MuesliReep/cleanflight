@@ -912,7 +912,7 @@ void loop(void)
 
 		//Limit output change rate
 		if ((int32_t)(currentTime - outputTime) >= 0) {
-			outputTime = currentTime + 505;
+			outputTime = currentTime + 250;
 			if (motorControlEnable) {
 				writeMotors();
 			}

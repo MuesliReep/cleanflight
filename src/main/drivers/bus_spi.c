@@ -28,12 +28,7 @@
 
 static volatile uint16_t spi1ErrorCount = 0;
 static volatile uint16_t spi2ErrorCount = 0;
-#ifdef STM32F303xC
 static volatile uint16_t spi3ErrorCount = 0;
-#endif
-#ifdef STM32F40_41xxx
-static volatile uint16_t spi3ErrorCount = 0;
-#endif
 
 #ifdef USE_SPI_DEVICE_1
 
