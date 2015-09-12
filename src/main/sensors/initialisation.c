@@ -145,11 +145,13 @@ const mpu6050Config_t *selectMPU6050Config(void)
 
 #ifdef USE_FAKE_GYRO
 static void fakeGyroInit(void) {}
-static void fakeGyroRead(int16_t *gyroADC) {
+static bool fakeGyroRead(int16_t *gyroADC) {
     memset(gyroADC, 0, sizeof(int16_t[XYZ_AXIS_COUNT]));
+    return true;
 }
-static void fakeGyroReadTemp(int16_t *tempData) {
+static bool fakeGyroReadTemp(int16_t *tempData) {
     UNUSED(tempData);
+    return true;
 }
 
 bool fakeGyroDetect(gyro_t *gyro, uint16_t lpf)
@@ -164,8 +166,9 @@ bool fakeGyroDetect(gyro_t *gyro, uint16_t lpf)
 
 #ifdef USE_FAKE_ACC
 static void fakeAccInit(void) {}
-static void fakeAccRead(int16_t *accData) {
+static bool fakeAccRead(int16_t *accData) {
     memset(accData, 0, sizeof(int16_t[XYZ_AXIS_COUNT]));
+    return true;
 }
 
 bool fakeAccDetect(acc_t *acc)
@@ -659,7 +662,7 @@ void reconfigureAlignment(sensorAlignmentConfig_t *sensorAlignmentConfig)
     }
 }
 
-bool sensorsAutodetect(sensorAlignmentConfig_t *sensorAlignmentConfig, uint16_t gyroLpf, uint8_t accHardwareToUse, uint8_t magHardwareToUse, uint8_t baroHardwareToUse, int16_t magDeclinationFromConfig, uint32_t looptime, uint8_t syncGyroToLoop)
+bool sensorsAutodetect(sensorAlignmentConfig_t *sensorAlignmentConfig, uint16_t gyroLpf, uint8_t accHardwareToUse, uint8_t magHardwareToUse, uint8_t baroHardwareToUse, int16_t magDeclinationFromConfig)
 {
     int16_t deg, min;
 

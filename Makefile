@@ -75,7 +75,9 @@ VPATH		:= $(SRC_DIR):$(SRC_DIR)/startup
 USBFS_DIR	= $(ROOT)/lib/main/STM32_USB-FS-Device_Driver
 USBPERIPH_SRC = $(notdir $(wildcard $(USBFS_DIR)/src/*.c))
 
-ifeq ($(TARGET),$(filter $(TARGET),STM32F3DISCOVERY CHEBUZZF3 NAZE32PRO SPRACINGF3 SPARKY ALIENWIIF3 COLIBRI_RACE MOTOLAB))
+CSOURCES        := $(shell find $(SRC_DIR) -name '*.c')
+
+ifeq ($(TARGET),$(filter $(TARGET),STM32F3DISCOVERY CHEBUZZF3 NAZE32PRO SPRACINGF3 SPARKY ALIENWIIF3 COLIBRI_RACE))
 
 STDPERIPH_DIR	= $(ROOT)/lib/main/STM32F30x_StdPeriph_Driver
 
@@ -124,6 +126,10 @@ endif
 ifeq ($(TARGET),MASSIVEF3)
 # MASSIVEF3 is a VARIANT of STM32F3DISCOVERY
 TARGET_FLAGS := $(TARGET_FLAGS) -DSTM32F3DISCOVERY
+endif
+
+ifeq ($(TARGET),COLIBRI_RACE)
+.DEFAULT_GOAL := binary
 endif
 
 else ifeq ($(TARGET),$(filter $(TARGET),ANYFC REVO COLIBRI))
@@ -770,7 +776,7 @@ OPTIMIZE	 = -Os
 LTO_FLAGS	 = -flto -fuse-linker-plugin $(OPTIMIZE)
 endif
 
-DEBUG_FLAGS	 = -ggdb3
+DEBUG_FLAGS	 = -ggdb3 -DDEBUG
 
 CFLAGS		 = $(ARCH_FLAGS) \
 		   $(LTO_FLAGS) \
@@ -811,6 +817,11 @@ LDFLAGS		 = -lm \
 ###############################################################################
 # No user-serviceable parts below
 ###############################################################################
+
+CPPCHECK         = cppcheck $(CSOURCES) --enable=all --platform=unix64 \
+		   --std=c99 --inline-suppr --quiet --force \
+		   $(addprefix -I,$(INCLUDE_DIRS)) \
+		   -I/usr/include -I/usr/include/linux
 
 #
 # Things we will build
@@ -880,6 +891,13 @@ unbrick_$(TARGET): $(TARGET_HEX)
 	stm32flash -w $(TARGET_HEX) -v -g 0x0 -b 115200 $(SERIAL_DEVICE)
 
 unbrick: unbrick_$(TARGET)
+
+## cppcheck    : run static analysis on C source code
+cppcheck: $(CSOURCES)
+	$(CPPCHECK)
+
+cppcheck-result.xml: $(CSOURCES)
+	$(CPPCHECK) --xml-version=2 2> cppcheck-result.xml
 
 help:
 	@echo ""

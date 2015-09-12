@@ -105,7 +105,7 @@ void telemetryInit(void);
 void serialInit(serialConfig_t *initialSerialConfig, bool softserialEnabled);
 void mspInit(serialConfig_t *serialConfig);
 void cliInit(serialConfig_t *serialConfig);
-void failsafeInit(rxConfig_t *intialRxConfig);
+void failsafeInit(rxConfig_t *intialRxConfig, uint16_t deadband3d_throttle);
 pwmOutputConfiguration_t *pwmInit(drv_pwm_config_t *init);
 #ifdef USE_SERVOS
 void mixerInit(mixerMode_e mixerMode, motorMixer_t *customMotorMixers, servoMixer_t *customServoMixers);
@@ -355,8 +355,8 @@ void init(void)
         i2cInit(I2C_DEVICE);
     }
 #else
-#if defined(ANYFC) || defined(COLIBRI) || defined(REVO)
     i2cInit(I2C_DEVICE_INT);
+#if defined(ANYFC) || defined(COLIBRI) || defined(REVO)
     if (!doesConfigurationUsePort(SERIAL_PORT_USART3)) {
 #ifdef I2C_DEVICE_EXT
         i2cInit(I2C_DEVICE_EXT);
@@ -393,9 +393,9 @@ void init(void)
     }
 #endif
 
-    if (!sensorsAutodetect(&masterConfig.sensorAlignmentConfig, masterConfig.gyro_lpf, masterConfig.acc_hardware, masterConfig.mag_hardware, masterConfig.baro_hardware, currentProfile->mag_declination, masterConfig.looptime, masterConfig.syncGyroToLoop)) {
+    if (!sensorsAutodetect(&masterConfig.sensorAlignmentConfig, masterConfig.gyro_lpf, masterConfig.acc_hardware, masterConfig.mag_hardware, masterConfig.baro_hardware, currentProfile->mag_declination)) {
         // if gyro was not detected due to whatever reason, we give up now.
-        failureMode(3);
+        failureMode(FAILURE_MISSING_ACC);
     }
 
     systemState |= SYSTEM_STATE_SENSORS_READY;
@@ -426,7 +426,7 @@ void init(void)
     cliInit(&masterConfig.serialConfig);
 #endif
 
-    failsafeInit(&masterConfig.rxConfig);
+    failsafeInit(&masterConfig.rxConfig, masterConfig.flight3DConfig.deadband3d_throttle);
 
     rxInit(&masterConfig.rxConfig);
 
