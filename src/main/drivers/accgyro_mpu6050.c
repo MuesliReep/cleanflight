@@ -1,4 +1,4 @@
-/*
+﻿/*
  * This file is part of Cleanflight.
  *
  * Cleanflight is free software: you can redistribute it and/or modify
@@ -165,7 +165,9 @@ static void mpu6050AccInit(void);
 static bool mpu6050AccRead(int16_t *accData);
 static void mpu6050GyroInit(void);
 static bool mpu6050GyroRead(int16_t *gyroADC);
-static void checkMPU6050Interrupt(bool *gyroIsUpdated);
+static void checkMPU6050DataReady(bool *mpuDataReadyPtr);
+
+static volatile bool mpuDataReady;
 
 typedef enum {
     MPU_6050_HALF_RESOLUTION,
@@ -183,6 +185,8 @@ void MPU_DATA_READY_EXTI_Handler(void)
     }
 
     EXTI_ClearITPendingBit(mpu6050Config->exti_line);
+
+    mpuDataReady = true;
 
 #ifdef DEBUG_MPU_DATA_READY_INTERRUPT
     // Measure the delta in micro seconds between calls to the interrupt handler
@@ -286,7 +290,7 @@ static bool mpu6050Detect(void)
 
     delay(35);          // datasheet page 13 says 30ms. other stuff could have been running meanwhile. but we'll be safe
 
-    ack = i2cRead(MPU6050_ADDRESS, MPU_RA_WHO_AM_I, 1, &sig);
+    ack = i2cRead(MPU6050_ADDRESS, MPU_RA_WHO_AM_I, 1, &sig, MPU6050_BUS);
     if (!ack)
         return false;
 
@@ -317,7 +321,7 @@ bool mpu6050AccDetect(const mpu6050Config_t *configToUse, acc_t *acc)
     // See https://android.googlesource.com/kernel/msm.git/+/eaf36994a3992b8f918c18e4f7411e8b2320a35f/drivers/misc/mpu6050/mldl_cfg.c
 
     // determine product ID and accel revision
-    i2cRead(MPU6050_ADDRESS, MPU_RA_XA_OFFS_H, 6, readBuffer);
+    i2cRead(MPU6050_ADDRESS, MPU_RA_XA_OFFS_H, 6, readBuffer, MPU6050_BUS);
     revision = ((readBuffer[5] & 0x01) << 2) | ((readBuffer[3] & 0x01) << 1) | (readBuffer[1] & 0x01);
     if (revision) {
         /* Congrats, these parts are better. */
@@ -329,7 +333,7 @@ bool mpu6050AccDetect(const mpu6050Config_t *configToUse, acc_t *acc)
             failureMode(FAILURE_ACC_INCOMPATIBLE);
         }
     } else {
-        i2cRead(MPU6050_ADDRESS, MPU_RA_PRODUCT_ID, 1, &productId);
+        i2cRead(MPU6050_ADDRESS, MPU_RA_PRODUCT_ID, 1, &productId, MPU6050_BUS);
         revision = productId & 0x0F;
         if (!revision) {
             failureMode(FAILURE_ACC_INCOMPATIBLE);
@@ -358,7 +362,7 @@ bool mpu6050GyroDetect(const mpu6050Config_t *configToUse, gyro_t *gyro, uint16_
 
     gyro->init = mpu6050GyroInit;
     gyro->read = mpu6050GyroRead;
-    gyro->intStatus = checkMPU6050Interrupt;
+    gyro->intStatus = checkMPU6050DataReady;
 
     // 16.4 dps/lsb scalefactor
     gyro->scale = 1.0f / 16.4f;
@@ -420,10 +424,9 @@ static void mpu6050GyroInit(void)
     bool ack;
     ack = i2cWrite(MPU6050_ADDRESS, MPU_RA_PWR_MGMT_1, 0x80, MPU6050_BUS);      //PWR_MGMT_1    -- DEVICE_RESET 1
     delay(100);
-    ack = i2cWrite(MPU6050_ADDRESS, MPU_RA_PWR_MGMT_1, 0x03);      //PWR_MGMT_1    -- SLEEP 0; CYCLE 0; TEMP_DIS 0; CLKSEL 3 (PLL with Z Gyro reference)
+    ack = i2cWrite(MPU6050_ADDRESS, MPU_RA_PWR_MGMT_1, 0x03, MPU6050_BUS);      //PWR_MGMT_1    -- SLEEP 0; CYCLE 0; TEMP_DIS 0; CLKSEL 3 (PLL with Z Gyro reference)
+    ack = i2cWrite(MPU6050_ADDRESS, MPU_RA_SMPLRT_DIV, gyroMPU6xxxGetDividerDrops(), MPU6050_BUS);  //SMPLRT_DIV    -- SMPLRT_DIV = 7  Sample Rate = Gyroscope Output Rate / (1 + SMPLRT_DIV)
     delay(15); //PLL Settling time when changing CLKSEL is max 10ms.  Use 15ms to be sure
-    ack = i2cWrite(MPU6050_ADDRESS, MPU_RA_SMPLRT_DIV, gyroMPU6xxxGetDivider());  //SMPLRT_DIV    -- SMPLRT_DIV = 7  Sample Rate = Gyroscope Output Rate / (1 + SMPLRT_DIV)
-    delay(15); //PLL Settling time when changing CLKSEL is max 10ms.  Use 15ms to be sure 
     ack = i2cWrite(MPU6050_ADDRESS, MPU_RA_CONFIG, mpuLowPassFilter, MPU6050_BUS); //CONFIG        -- EXT_SYNC_SET 0 (disable input pin for data sync) ; default DLPF_CFG = 0 => ACC bandwidth = 260Hz  GYRO bandwidth = 256Hz)
     ack = i2cWrite(MPU6050_ADDRESS, MPU_RA_GYRO_CONFIG, INV_FSR_2000DPS << 3, MPU6050_BUS);   //GYRO_CONFIG   -- FS_SEL = 3: Full scale set to 2000 deg/sec
 
@@ -456,12 +459,11 @@ static bool mpu6050GyroRead(int16_t *gyroADC)
     return true;
 }
 
-void checkMPU6050Interrupt(bool *gyroIsUpdated) {
-	uint8_t mpuIntStatus;
-
-	i2cRead(MPU6050_ADDRESS, MPU_RA_INT_STATUS, 1, &mpuIntStatus);
-
-	delayMicroseconds(5);
-
-	(mpuIntStatus) ? (*gyroIsUpdated= true) : (*gyroIsUpdated= false);
+void checkMPU6050DataReady(bool *mpuDataReadyPtr) {
+	if (mpuDataReady) {
+		*mpuDataReadyPtr = true;
+	    mpuDataReady= false;
+	} else {
+		*mpuDataReadyPtr = false;
+	}
 }

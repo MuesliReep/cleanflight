@@ -137,7 +137,7 @@ static uint32_t activeFeaturesLatch = 0;
 static uint8_t currentControlRateProfileIndex = 0;
 controlRateConfig_t *currentControlRateProfile;
 
-static const uint8_t EEPROM_CONF_VERSION = 105;
+static const uint8_t EEPROM_CONF_VERSION = 108;
 
 static void resetAccelerometerTrims(flightDynamicsTrims_t *accelerometerTrims)
 {
@@ -152,10 +152,10 @@ static void resetPidProfile(pidProfile_t *pidProfile)
 
     pidProfile->P8[ROLL] = 40;
     pidProfile->I8[ROLL] = 30;
-    pidProfile->D8[ROLL] = 23;
+    pidProfile->D8[ROLL] = 40;
     pidProfile->P8[PITCH] = 40;
     pidProfile->I8[PITCH] = 30;
-    pidProfile->D8[PITCH] = 23;
+    pidProfile->D8[PITCH] = 40;
     pidProfile->P8[YAW] = 85;
     pidProfile->I8[YAW] = 45;
     pidProfile->D8[YAW] = 0;
@@ -180,9 +180,7 @@ static void resetPidProfile(pidProfile_t *pidProfile)
     pidProfile->D8[PIDVEL] = 1;
 
     pidProfile->yaw_p_limit = YAW_P_LIMIT_MAX;
-    pidProfile->gyro_cut_hz = 0;
-    pidProfile->pterm_cut_hz = 40;
-    pidProfile->dterm_cut_hz = 8;
+    pidProfile->dterm_cut_hz = 40;
 
     pidProfile->P_f[ROLL] = 1.5f;     // new PID with preliminary defaults test carefully
     pidProfile->I_f[ROLL] = 0.4f;
@@ -191,7 +189,7 @@ static void resetPidProfile(pidProfile_t *pidProfile)
     pidProfile->I_f[PITCH] = 0.4f;
     pidProfile->D_f[PITCH] = 0.03f;
     pidProfile->P_f[YAW] = 3.5f;
-    pidProfile->I_f[YAW] = 1.0f;
+    pidProfile->I_f[YAW] = 0.9f;
     pidProfile->D_f[YAW] = 0.00f;
     pidProfile->A_level = 5.0f;
     pidProfile->H_level = 3.0f;
@@ -319,12 +317,12 @@ void resetSerialConfig(serialConfig_t *serialConfig)
 }
 
 static void resetControlRateConfig(controlRateConfig_t *controlRateConfig) {
-    controlRateConfig->rcRate8 = 90;
-    controlRateConfig->rcExpo8 = 65;
+    controlRateConfig->rcRate8 = 100;
+    controlRateConfig->rcExpo8 = 70;
     controlRateConfig->thrMid8 = 50;
     controlRateConfig->thrExpo8 = 0;
     controlRateConfig->dynThrPID = 0;
-    controlRateConfig->rcYawExpo8 = 0;
+    controlRateConfig->rcYawExpo8 = 20;
     controlRateConfig->tpa_breakpoint = 1500;
 
     for (uint8_t axis = 0; axis < FLIGHT_DYNAMICS_INDEX_COUNT; axis++) {
@@ -410,7 +408,6 @@ static void resetConf(void)
     masterConfig.current_profile_index = 0;     // default profile
     masterConfig.gyro_cmpf_factor = 600;        // default MWC
     masterConfig.gyro_cmpfm_factor = 250;       // default MWC
-    masterConfig.gyro_lpf = 188;                // supported by all gyro drivers now. In case of ST gyro, will default to 32Hz instead
 
     resetAccelerometerTrims(&masterConfig.accZero);
 
@@ -424,8 +421,8 @@ static void resetConf(void)
     masterConfig.yaw_control_direction = 1;
     masterConfig.gyroConfig.gyroMovementCalibrationThreshold = 32;
 
-    masterConfig.mag_hardware = MAG_DEFAULT;     // default/autodetect
-    masterConfig.baro_hardware = BARO_DEFAULT;   // default/autodetect
+    masterConfig.mag_hardware = 1;     // default/autodetect
+    masterConfig.baro_hardware = 1;   // default/autodetect
 
     resetBatteryConfig(&masterConfig.batteryConfig);
 
@@ -441,7 +438,7 @@ static void resetConf(void)
 
     for (i = 0; i < MAX_SUPPORTED_RC_CHANNEL_COUNT; i++) {
         rxFailsafeChannelConfiguration_t *channelFailsafeConfiguration = &masterConfig.rxConfig.failsafe_channel_configurations[i];
-        channelFailsafeConfiguration->mode = (i < NON_AUX_CHANNEL_COUNT) ? RX_FAILSAFE_MODE_AUTO : RX_FAILSAFE_MODE_HOLD;
+        channelFailsafeConfiguration->mode = RX_FAILSAFE_MODE_AUTO;
         channelFailsafeConfiguration->step = (i == THROTTLE) ? masterConfig.rxConfig.rx_min_usec : CHANNEL_VALUE_TO_RXFAIL_STEP(masterConfig.rxConfig.midrc);
     }
 
@@ -483,10 +480,7 @@ static void resetConf(void)
 
     resetSerialConfig(&masterConfig.serialConfig);
 
-    masterConfig.looptime = 0;
     masterConfig.emf_avoidance = 0;
-    masterConfig.syncGyroToLoop = 1;
-    masterConfig.rcSmoothing = 1;
 
     resetPidProfile(&currentProfile->pidProfile);
 
@@ -578,8 +572,6 @@ static void resetConf(void)
     masterConfig.escAndServoConfig.minthrottle = 1000;
     masterConfig.escAndServoConfig.maxthrottle = 2000;
     masterConfig.motor_pwm_rate = 32000;
-    masterConfig.looptime = 0;
-    masterConfig.rcSmoothing = 1;
     currentProfile->pidProfile.pidController = 3;
     currentProfile->pidProfile.P8[ROLL] = 36;
     currentProfile->pidProfile.P8[PITCH] = 36;

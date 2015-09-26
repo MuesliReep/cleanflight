@@ -63,6 +63,10 @@
 #define USE_ACC_SPI_MPU6500
 #define ACC_SPI_MPU6500_ALIGN CW270_DEG
 
+// MPU6500 interrupts
+#define USE_MPU_DATA_READY_SIGNAL
+#define MPU_INTHandler EXTI5_IRQHandler
+
 #define BARO
 #define USE_BARO_MS5611
 #define MS5611_BUS I2C_DEVICE_INT

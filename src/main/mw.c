@@ -20,6 +20,7 @@
 #include <stdint.h>
 #include <math.h>
 
+#include "debug.h"
 #include "platform.h"
 
 #include "common/maths.h"
@@ -89,11 +90,14 @@ enum {
     ALIGN_MAG = 2
 };
 
+//#define DEBUG_JITTER 3
+
 /* VBAT monitoring interval (in microseconds) - 1s*/
 #define VBATINTERVAL (6 * 3500)       
 /* IBat monitoring interval (in microseconds) - 6 default looptimes */
 #define IBATINTERVAL (6 * 3500)
-#define GYRO_WATCHDOG_DELAY 150  // Watchdog for boards without interrupt for gyro
+#define GYRO_WATCHDOG_DELAY 100  // Watchdog for boards without interrupt for gyro
+#define PREVENT_RX_PROCESS_PRE_LOOP_TRIGGER 90 // Prevent RX processing before expected loop trigger
 
 uint32_t outputTime = 0;
 uint32_t currentTime = 0;
@@ -361,9 +365,7 @@ void mwArm(void)
                 if (sharedBlackboxAndMspPort) {
                     mspReleasePortIfAllocated(sharedBlackboxAndMspPort);
                 }
-                if (IS_RC_MODE_ACTIVE(BOXBLACKBOX)) {
-                    startBlackbox();
-                }
+                startBlackbox();
             }
 #endif
             disarmAt = millis() + masterConfig.auto_disarm_delay * 1000;   // start disarm timeout, will be extended when throttle is nonzero
@@ -711,21 +713,6 @@ void processRx(void)
 
 }
 
-// Gyro Low Pass
-void filterGyro(void) {
-    int axis;
-    static float dTGyro;
-    static filterStatePt1_t gyroADCState[XYZ_AXIS_COUNT];
-
-    if (!dTGyro) {
-        dTGyro = (float)targetLooptime * 0.000001f;
-    }
-
-    for (axis = 0; axis < XYZ_AXIS_COUNT; axis++) {
-        gyroADC[axis] = filterApplyPt1(gyroADC[axis], &gyroADCState[axis], currentProfile->pidProfile.gyro_cut_hz, dTGyro);
-    }
-}
-
 void filterRc(void){
     static int16_t lastCommand[4] = { 0, 0, 0, 0 };
     static int16_t deltaRC[4] = { 0, 0, 0, 0 };
@@ -761,33 +748,25 @@ void filterRc(void){
     }
 }
 
-// Function for loop trigger
-bool runLoop(uint32_t loopTime) {
-	bool loopTrigger = false;
-
-    if (masterConfig.syncGyroToLoop) {
-        if (gyroSyncCheckUpdate() || (int32_t)(currentTime - (loopTime + GYRO_WATCHDOG_DELAY)) >= 0) {
-            loopTrigger = true;
-        }
+bool imuUpdateAccDelayed(void) {
+    if (flightModeFlags) {
+        return false;
+    } else {
+        return true;
     }
-
-    else if ((int32_t)(currentTime - loopTime) >= 0){
-    	loopTrigger = true;
-    }
-
-    return loopTrigger;
 }
 
 void loop(void)
 {
     static uint32_t loopTime;
+
 #if defined(BARO) || defined(SONAR)
     static bool haveProcessedAnnexCodeOnce = false;
 #endif
 
     updateRx(currentTime);
 
-    if (shouldProcessRx(currentTime)) {
+    if (shouldProcessRx(currentTime) && !((int32_t)(currentTime - (loopTime - PREVENT_RX_PROCESS_PRE_LOOP_TRIGGER)) >= 0)) {
         processRx();
         isRXDataNew = true;
 
@@ -824,26 +803,39 @@ void loop(void)
     }
 
     currentTime = micros();
-    if (runLoop(loopTime)) {
+    if (gyroSyncCheckUpdate() || (int32_t)(currentTime - (loopTime + GYRO_WATCHDOG_DELAY)) >= 0) {
 
         loopTime = currentTime + targetLooptime;
 
-        imuUpdate(&currentProfile->accelerometerTrims);
+        // Determine current flight mode. When no acc needed in pid calculations we should only read gyro to reduce latency
+        if (imuUpdateAccDelayed()) {
+            imuUpdate(&currentProfile->accelerometerTrims, ONLY_GYRO);  // When no level modes active read only gyro
+        } else {
+            imuUpdate(&currentProfile->accelerometerTrims, ACC_AND_GYRO);  // When level modes active read gyro and acc
+        }
 
         // Measure loop rate just after reading the sensors
         currentTime = micros();
         cycleTime = (int32_t)(currentTime - previousTime);
         previousTime = currentTime;
 
-        dT = (float)cycleTime * 0.000001f;
+#ifdef DEBUG_JITTER
+        static uint32_t previousCycleTime;
 
-        if (currentProfile->pidProfile.gyro_cut_hz) {
-            filterGyro();
-        }
+		if (previousCycleTime > cycleTime) {
+		    debug[DEBUG_JITTER] = previousCycleTime - cycleTime;
+		} else {
+	        debug[DEBUG_JITTER] = cycleTime - previousCycleTime;
+		}
+		previousCycleTime = cycleTime;
+#endif
 
-        if (masterConfig.rcSmoothing) {
-            filterRc();
-        }
+
+        dT = (float)targetLooptime * 0.000001f;
+
+        filterApply7TapFIR(gyroADC);
+
+        filterRc();
 
         annexCode();
 #if defined(BARO) || defined(SONAR)
@@ -920,6 +912,11 @@ void loop(void)
 				writeMotors();
 			}
 		}
+
+        // When no level modes active read acc after motor update
+        if (imuUpdateAccDelayed()) {
+            imuUpdate(&currentProfile->accelerometerTrims, ONLY_ACC);
+        }
 
 #ifdef BLACKBOX
         if (!cliMode && feature(FEATURE_BLACKBOX)) {

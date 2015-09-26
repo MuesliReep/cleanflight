@@ -25,13 +25,32 @@
 #define MPU6500_RA_ACCEL_CFG                (0x1C)
 #define MPU6500_RA_LPF                      (0x1A)
 #define MPU6500_RA_RATE_DIV                 (0x19)
-#define MPU6500_INT_STATUS                  (0x38)
+#define MPU6500_RA_INT_ENABLE               (0x38)
+#define MPU6500_RA_INT_STATUS               (0x3A)
 
 #define MPU6500_WHO_AM_I_CONST              (0x70)
 
 #define MPU6500_BIT_RESET                   (0x80)
 
 #pragma once
+typedef struct mpu6500Config_s {
+#ifdef STM32F303
+    uint32_t gpioAHBPeripherals;
+#endif
+#ifdef STM32F10X
+    uint32_t gpioAPB2Peripherals;
+#endif
+#ifdef STM32F40_41xxx
+    uint32_t gpioAHB1Peripherals;
+#endif
+    uint16_t gpioPin;
+    GPIO_TypeDef *gpioPort;
 
-bool mpu6500SpiAccDetect(acc_t *acc);
-bool mpu6500SpiGyroDetect(gyro_t *gyro, uint16_t lpf);
+    uint8_t exti_port_source;
+    uint32_t exti_line;
+    uint8_t exti_pin_source;
+    IRQn_Type exti_irqn;
+} mpu6500Config_t;
+
+bool mpu6500SpiAccDetect(const mpu6500Config_t *config, acc_t *acc);
+bool mpu6500SpiGyroDetect(const mpu6500Config_t *config, gyro_t *gyro, uint16_t lpf);

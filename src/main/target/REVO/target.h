@@ -42,6 +42,10 @@
 #define USE_GYRO_SPI_MPU6000
 #define GYRO_SPI_MPU6000_ALIGN CW270_DEG
 
+// MPU6000 interrupts
+#define USE_MPU_DATA_READY_SIGNAL
+#define MPU_INTHandler EXTI4_IRQHandler
+
 #define MAG
 //#define USE_MAG_HMC5883
 #define HMC5883_BUS I2C_DEVICE_INT

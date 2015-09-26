@@ -54,6 +54,10 @@
 
 #define ACC_SPI_MPU6000_ALIGN CW270_DEG
 
+// MPU6000 interrupts
+#define USE_MPU_DATA_READY_SIGNAL
+#define MPU_INTHandler EXTI3_IRQHandler
+
 // External I2C BARO
 #define BARO
 #define USE_BARO_MS5611
@@ -61,6 +65,7 @@
 #define USE_BARO_BMP085
 #define BMP085_BUS I2C_DEVICE_EXT
 #define USE_BARO_BMP280
+#define BMP280_BUS I2C_DEVICE_EXT
 
 // External I2C MAG
 #define MAG
@@ -153,3 +158,5 @@
 // USART3, PB11 (Flexport)
 #define BIND_PORT  GPIOB
 #define BIND_PIN   Pin_11
+
+#define USE_QUATERNION

@@ -26,7 +26,17 @@
 #define LED1_PIN    Pin_5  // Green (Rev 1) / Red (Rev 2) - PB5
 #define LED1_PERIPHERAL RCC_AHBPeriph_GPIOB
 
+#define BEEP_GPIO   GPIOA  //USE PWM10 as beeper signal
+#define BEEP_PIN    Pin_1
+#define BEEP_PERIPHERAL RCC_AHBPeriph_GPIOA
+#define BEEPER_INVERTED
+#define BEEPER
+
 #define USABLE_TIMER_CHANNEL_COUNT 11
+
+// MPU6050 interrupts
+#define EXTI15_10_CALLBACK_HANDLER_COUNT 1 // MPU data ready
+#define USE_MPU_DATA_READY_SIGNAL
 
 // MPU 9150 INT connected to PA15, pulled up to VCC by 10K Resistor, contains MPU6050 and AK8975 in single component.
 #define GYRO
@@ -44,6 +54,7 @@
 #define USE_BARO_MS5611
 #define MS5611_BUS I2C_DEVICE_INT
 #define USE_BARO_BMP280
+#define BMP280_BUS I2C_DEVICE_INT
 
 #define MAG
 #define USE_MAG_AK8975
@@ -156,6 +167,12 @@
 #define WS2811_IRQ                      DMA1_Channel7_IRQn
 #endif
 
+#define USE_SERIAL_1WIRE
+#define ESC_COUNT 6
+#define S1W_TX_GPIO         GPIOB
+#define S1W_TX_PIN          GPIO_Pin_6
+#define S1W_RX_GPIO         GPIOB
+#define S1W_RX_PIN          GPIO_Pin_7
 
 #define SPEKTRUM_BIND
 // USART2, PA3

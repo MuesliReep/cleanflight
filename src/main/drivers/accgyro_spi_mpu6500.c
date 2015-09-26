@@ -24,6 +24,8 @@
 #include "common/axis.h"
 #include "common/maths.h"
 
+#include "nvic.h"
+
 #include "system.h"
 #include "gpio.h"
 #include "bus_spi.h"
@@ -77,8 +79,130 @@ static bool mpu6500AccRead(int16_t *accData);
 static void mpu6500GyroInit(void);
 static bool mpu6500GyroRead(int16_t *gyroADC);
 static void checkMPU6500Interrupt(bool *gyroIsUpdated);
+void checkMPU6500DataReady(bool *mpuDataReadyPtr);
 
+static bool mpuDataReady;
+static const mpu6500Config_t *mpu6500Config = NULL;
 extern uint16_t acc_1G;
+
+void MPU_INTHandler(void)
+{
+    if (EXTI_GetITStatus(mpu6500Config->exti_line) == RESET) {
+        return;
+    }
+
+    EXTI_ClearITPendingBit(mpu6500Config->exti_line);
+
+    mpuDataReady = true;
+
+#ifdef DEBUG_MPU_DATA_READY_INTERRUPT
+    // Measure the delta in micro seconds between calls to the interrupt handler
+    static uint32_t lastCalledAt = 0;
+    static int32_t callDelta = 0;
+
+    uint32_t now = micros();
+    callDelta = now - lastCalledAt;
+
+    //UNUSED(callDelta);
+    debug[0] = callDelta;
+
+    lastCalledAt = now;
+#endif
+}
+
+void configureMPU6500DataReadyInterruptHandling(void)
+{
+#ifdef USE_MPU_DATA_READY_SIGNAL
+
+#ifdef STM32F10X
+    // enable AFIO for EXTI support
+    RCC_APB2PeriphClockCmd(RCC_APB2Periph_AFIO, ENABLE);
+#endif
+
+#ifdef STM32F303xC
+    /* Enable SYSCFG clock otherwise the EXTI irq handlers are not called */
+    RCC_APB2PeriphClockCmd(RCC_APB2Periph_SYSCFG, ENABLE);
+#endif
+
+#ifdef STM32F40_41xxx
+    /* Enable SYSCFG clock otherwise the EXTI irq handlers are not called */
+    RCC_APB2PeriphClockCmd(RCC_APB2Periph_SYSCFG, ENABLE);
+#endif
+
+#ifdef STM32F10X
+    gpioExtiLineConfig(mpu6500Config->exti_port_source, mpu6500Config->exti_pin_source);
+#endif
+
+#ifdef STM32F303xC
+    gpioExtiLineConfig(mpu6500Config->exti_port_source, mpu6500Config->exti_pin_source);
+#endif
+
+#ifdef STM32F40_41xxx
+    gpioExtiLineConfig(mpu6500Config->exti_port_source, mpu6500Config->exti_pin_source);
+#endif
+
+#ifdef ENSURE_MPU_DATA_READY_IS_LOW
+    uint8_t status = GPIO_ReadInputDataBit(mpu6500Config->gpioPort, mpu6000Config->gpioPin);
+    if (status) {
+        return;
+    }
+#endif
+
+    EXTI_ClearITPendingBit(mpu6500Config->exti_line);
+
+    EXTI_InitTypeDef EXTIInit;
+    EXTIInit.EXTI_Line = mpu6500Config->exti_line;
+    EXTIInit.EXTI_Mode = EXTI_Mode_Interrupt;
+    EXTIInit.EXTI_Trigger = EXTI_Trigger_Rising;
+    EXTIInit.EXTI_LineCmd = ENABLE;
+    EXTI_Init(&EXTIInit);
+
+    NVIC_InitTypeDef NVIC_InitStructure;
+
+    NVIC_InitStructure.NVIC_IRQChannel = mpu6500Config->exti_irqn;
+    NVIC_InitStructure.NVIC_IRQChannelPreemptionPriority = NVIC_PRIORITY_BASE(NVIC_PRIO_MPU_DATA_READY);
+    NVIC_InitStructure.NVIC_IRQChannelSubPriority = NVIC_PRIORITY_SUB(NVIC_PRIO_MPU_DATA_READY);
+    NVIC_InitStructure.NVIC_IRQChannelCmd = ENABLE;
+    NVIC_Init(&NVIC_InitStructure);
+#endif
+}
+
+void mpu6500GpioInit(void) {
+    gpio_config_t gpio;
+
+    static bool mpu6500GpioInitDone = false;
+
+    if (mpu6500GpioInitDone || !mpu6500Config) {
+        return;
+    }
+
+#ifdef STM32F303
+        if (mpu6500Config->gpioAHBPeripherals) {
+            RCC_AHBPeriphClockCmd(mpu6500Config->gpioAHBPeripherals, ENABLE);
+        }
+#endif
+#ifdef STM32F10X
+        if (mpu6500Config->gpioAPB2Peripherals) {
+            RCC_APB2PeriphClockCmd(mpu6500Config->gpioAPB2Peripherals, ENABLE);
+        }
+#endif
+#ifdef STM32F40_41xxx
+        if (mpu6500Config->gpioAHB1Peripherals) {
+            RCC_AHB1PeriphClockCmd(mpu6500Config->gpioAHB1Peripherals, ENABLE);
+        }
+#endif
+
+    gpio.pin = mpu6500Config->gpioPin;
+    gpio.speed = Speed_2MHz;
+    gpio.mode = Mode_IN_FLOATING;
+    gpioInit(mpu6500Config->gpioPort, &gpio);
+
+    configureMPU6500DataReadyInterruptHandling();
+
+    mpu6500GpioInitDone = true;
+}
+//
+
 
 static void mpu6500WriteRegister(uint8_t reg, uint8_t data)
 {
@@ -149,8 +273,10 @@ static bool mpu6500Detect(void)
     return true;
 }
 
-bool mpu6500SpiAccDetect(acc_t *acc)
+bool mpu6500SpiAccDetect(const mpu6500Config_t *configToUse, acc_t *acc)
 {
+    mpu6500Config = configToUse;
+
     if (!mpu6500Detect()) {
         return false;
     }
@@ -161,15 +287,21 @@ bool mpu6500SpiAccDetect(acc_t *acc)
     return true;
 }
 
-bool mpu6500SpiGyroDetect(gyro_t *gyro, uint16_t lpf)
+bool mpu6500SpiGyroDetect(const mpu6500Config_t *configToUse, gyro_t *gyro, uint16_t lpf)
 {
+    mpu6500Config = configToUse;
+
     if (!mpu6500Detect()) {
         return false;
     }
 
     gyro->init = mpu6500GyroInit;
     gyro->read = mpu6500GyroRead;
+#ifdef USE_MPU_DATA_READY_SIGNAL
+    gyro->intStatus = checkMPU6500DataReady;
+#else
     gyro->intStatus = checkMPU6500Interrupt;
+#endif
 
     // 16.4 dps/lsb scalefactor
     gyro->scale = 1.0f / 16.4f;
@@ -194,6 +326,7 @@ bool mpu6500SpiGyroDetect(gyro_t *gyro, uint16_t lpf)
 
 static void mpu6500AccInit(void)
 {
+    mpu6500GpioInit();
     acc_1G = 512 * 8;
 }
 
@@ -222,6 +355,7 @@ static void mpu6500GyroInit(void)
         gpioInit(GPIOC, &gpio);
     }
 #endif
+    mpu6500GpioInit();
 
     mpu6500WriteRegister(MPU6500_RA_PWR_MGMT_1, MPU6500_BIT_RESET);
     delay(100);
@@ -231,7 +365,8 @@ static void mpu6500GyroInit(void)
     mpu6500WriteRegister(MPU6500_RA_GYRO_CFG, INV_FSR_2000DPS << 3);
     mpu6500WriteRegister(MPU6500_RA_ACCEL_CFG, INV_FSR_8G << 3);
     mpu6500WriteRegister(MPU6500_RA_LPF, mpuLowPassFilter);
-    mpu6500WriteRegister(MPU6500_RA_RATE_DIV, 0); // 1kHz S/R
+    mpu6500WriteRegister(MPU6500_RA_RATE_DIV, gyroMPU6xxxGetDividerDrops()); // Get Divider drop count
+    mpu6500WriteRegister(MPU6500_RA_INT_ENABLE, 0x01);
 }
 
 static bool mpu6500GyroRead(int16_t *gyroADC)
@@ -247,12 +382,26 @@ static bool mpu6500GyroRead(int16_t *gyroADC)
     return true;
 }
 
+#ifdef USE_MPU_DATA_READY_SIGNAL
+void checkMPU6500DataReady(bool *mpuDataReadyPtr) {
+    if (mpuDataReady) {
+        *mpuDataReadyPtr = true;
+        mpuDataReady= false;
+    } else {
+        *mpuDataReadyPtr = false;
+    }
+}
+#else
 void checkMPU6500Interrupt(bool *gyroIsUpdated) {
 	uint8_t mpuIntStatus;
 
-	mpu6500ReadRegister(MPU6500_INT_STATUS, &mpuIntStatus, 1);
+	mpu6500ReadRegister(MPU6500_RA_INT_STATUS, &mpuIntStatus, 1);
 
-	delayMicroseconds(5);
-
-	(mpuIntStatus) ? (*gyroIsUpdated= true) : (*gyroIsUpdated= false);
+    if (mpuIntStatus) {
+        *gyroIsUpdated = true;
+    } else {
+        *gyroIsUpdated = false;
+    }
 }
+#endif
+
