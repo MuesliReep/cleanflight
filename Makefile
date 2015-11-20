@@ -39,7 +39,7 @@ FLASH_SIZE ?=
 FORKNAME			 = cleanflightF4
 
 VALID_TARGETS	 = NAZE NAZE32PRO OLIMEXINO STM32F3DISCOVERY CHEBUZZF3 CC3D CJMCU EUSTM32F103RC SPRACINGF3 PORT103R SPARKY ALIENWIIF1 ALIENWIIF3 COLIBRI_RACE
-VALID_TARGETS	 += ANYFC REVO COLIBRI
+VALID_TARGETS	 += ANYFC REVO COLIBRI NUCLEUS
 
 # Valid targets for OP BootLoader support
 OPBL_VALID_TARGETS = CC3D
@@ -54,6 +54,8 @@ else ifeq ($(TARGET),$(filter $(TARGET),EUSTM32F103RC PORT103R STM32F3DISCOVERY 
 FLASH_SIZE = 256
 else ifeq ($(TARGET),$(filter $(TARGET),ANYFC REVO COLIBRI))
 FLASH_SIZE = 256
+else ifeq($(TARGET),$(filter $(TARGET),NUCLEUS))
+FLASE_SIZE = 1024
 else
 $(error FLASH_SIZE not configured for target)
 endif
@@ -132,7 +134,7 @@ ifeq ($(TARGET),COLIBRI_RACE)
 .DEFAULT_GOAL := binary
 endif
 
-else ifeq ($(TARGET),$(filter $(TARGET),ANYFC REVO COLIBRI))
+else ifeq ($(TARGET),$(filter $(TARGET),ANYFC REVO COLIBRI NUCLEUS))
 
 STDPERIPH_DIR	= $(ROOT)/lib/main/STM32F4xx_StdPeriph_Driver
 STDPERIPH_SRC = $(notdir $(wildcard $(STDPERIPH_DIR)/src/*.c))
@@ -194,6 +196,11 @@ endif
 ifeq ($(TARGET),COLIBRI)
 DEVICE_FLAGS += -DHSE_VALUE=16000000
 LD_SCRIPT	 = $(LINKER_DIR)/stm32_flash_f405_bl.ld
+.DEFAULT_GOAL := binary
+endif
+ifeq ($(TARGET),NUCLEUS)
+DEVICE_FLAGS += -DHSE_VALUE=12000000
+LD_SCRIPT	 = $(LINKER_DIR)/stm32_flash_f407.ld
 .DEFAULT_GOAL := binary
 endif
 TARGET_FLAGS = -D$(TARGET)
@@ -637,6 +644,32 @@ REVO_SRC = startup_stm32f40xx.s \
 		   $(HIGHEND_SRC) \
 		   $(COMMON_SRC) \
 		   $(VCPF4_SRC)
+		   
+NUCLUES_SRC = startup_stm32f40xx.s \
+		   drivers/accgyro_spi_mpu6000.c \
+		   drivers/barometer_ms5611.c \
+		   drivers/compass_hmc5883l.c \
+		   drivers/adc.c \
+		   drivers/adc_stm32f4xx.c \
+		   drivers/bus_i2c_stm32f4xx.c \
+		   drivers/bus_spi.c \
+		   drivers/gpio_stm32f4xx.c \
+		   drivers/inverter.c \
+		   drivers/light_led_stm32f4xx.c \
+		   drivers/pwm_mapping.c \
+		   drivers/pwm_output.c \
+		   drivers/pwm_rx.c \
+		   drivers/serial_softserial.c \
+		   drivers/serial_escserial.c \
+		   drivers/serial_uart.c \
+		   drivers/serial_uart_stm32f4xx.c \
+		   drivers/system_stm32f4xx.c \
+		   drivers/timer.c \
+		   drivers/timer_stm32f4xx.c \
+		   io/flashfs.c \
+		   $(HIGHEND_SRC) \
+		   $(COMMON_SRC) \
+		   $(VCPF4_SRC)		   
 
 STM32F30x_COMMON_SRC	 = \
 		   startup_stm32f30x_md_gcc.S \
