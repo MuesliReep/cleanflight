@@ -55,13 +55,17 @@
 
 #define USABLE_TIMER_CHANNEL_COUNT 11
 
+#define EXTI_CALLBACK_HANDLER_COUNT 1 // MPU data ready
+
 #define GYRO
+#define USE_GYRO_MPU6500
 #define USE_GYRO_SPI_MPU6500
-#define GYRO_SPI_MPU6500_ALIGN CW270_DEG
+#define GYRO_MPU6500_ALIGN CW270_DEG
 
 #define ACC
+#define USE_ACC_MPU6500
 #define USE_ACC_SPI_MPU6500
-#define ACC_SPI_MPU6500_ALIGN CW270_DEG
+#define ACC_MPU6500_ALIGN CW270_DEG
 
 #define BARO
 #define USE_BARO_MS5611
@@ -146,6 +150,7 @@
 
 #define BLACKBOX
 #define GPS
+#define GTUNE
 #define LED_STRIP
 
 #define LED_STRIP_TIMER TIM16
@@ -161,9 +166,13 @@
 #define WS2811_DMA_CHANNEL              DMA1_Channel3
 #define WS2811_IRQ                      DMA1_Channel3_IRQn
 
+// MPU6500 interrupt
+//#define DEBUG_MPU_DATA_READY_INTERRUPT
+#define USE_MPU_DATA_READY_SIGNAL
+#define ENSURE_MPU_DATA_READY_IS_LOW
+
 #define TELEMETRY
 #define SERIAL_RX
-#define AUTOTUNE
 #define USE_SERVOS
 #define USE_CLI
 #define UG2864_BUS I2C_DEVICE_INT

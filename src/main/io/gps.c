@@ -86,7 +86,7 @@ uint32_t GPS_svInfoReceivedCount = 0; // SV = Space Vehicle, counter increments 
 uint8_t GPS_update = 0;             // it's a binary toggle to distinct a GPS position update
 
 uint16_t GPS_altitude;              // altitude in 0.1m
-int32_t GPS_VELNED[3];              // mm/s
+int32_t GPS_VELNED[3];              // cm/s
 uint16_t GPS_speed;                 // speed in 0.1m/s
 uint16_t GPS_ground_course = 0;     // degrees * 10
 
@@ -110,7 +110,7 @@ uint32_t hwVersion = 0;
 static serialConfig_t *serialConfig;
 static serialPort_t *gpsPort;
 
-typedef struct gpsInitData_t {
+typedef struct gpsInitData_s {
     uint8_t index;
     uint8_t baudrateIndex; // see baudRate_e
     const char *ubx;
@@ -457,7 +457,7 @@ void gpsThread(void)
 {
     // read out available GPS bytes
     if (gpsPort) {
-        while (serialTotalBytesWaiting(gpsPort))
+        while (serialRxBytesWaiting(gpsPort))
             gpsNewData(serialRead(gpsPort));
     }
 
@@ -1103,9 +1103,9 @@ static bool UBLOX_parse_gps(void)
     case MSG_VELNED:
         *gpsPacketLogChar = LOG_UBLOX_VELNED;
         // speed_3d                        = _buffer.velned.speed_3d;  // cm/s
-        GPS_VELNED[0]=_buffer.velned.ned_north*10;  // cm/s
-        GPS_VELNED[1]=_buffer.velned.ned_east*10;   // cm/s
-        GPS_VELNED[2]=_buffer.velned.ned_down*10;   // cm/s
+        GPS_VELNED[0]=_buffer.velned.ned_north;  // cm/s
+        GPS_VELNED[1]=_buffer.velned.ned_east;   // cm/s
+        GPS_VELNED[2]=_buffer.velned.ned_down;   // cm/s
         GPS_speed = _buffer.velned.speed_2d;    // cm/s
         GPS_ground_course = (uint16_t) (_buffer.velned.heading_2d / 10000);     // Heading 2D deg * 100000 rescaled to deg * 10
         _new_speed = true;
@@ -1121,10 +1121,10 @@ static bool UBLOX_parse_gps(void)
         } else {
             DISABLE_STATE(GPS_FIX);
         }
-        GPS_VELNED[0]=_buffer.pvt.ned_north;  // mm/s
-        GPS_VELNED[1]=_buffer.pvt.ned_east;   // mm/s
-        GPS_VELNED[2]=_buffer.pvt.ned_down;   // mm/s
-        GPS_speed = _buffer.pvt.speed_2d/10;    // mm/s
+        GPS_VELNED[0]=_buffer.pvt.ned_north/10;  // to cm/s
+        GPS_VELNED[1]=_buffer.pvt.ned_east/10;   // to cm/s
+        GPS_VELNED[2]=_buffer.pvt.ned_down/10;   // to cm/s
+        GPS_speed = _buffer.pvt.speed_2d/10;    // to cm/s
         GPS_ground_course = (uint16_t) (_buffer.pvt.heading_2d / 10000);     // Heading 2D deg * 100000 rescaled to deg * 10
         GPS_numSat = _buffer.pvt.satellites;
         GPS_hdop = _buffer.pvt.position_DOP;
@@ -1278,25 +1278,25 @@ static bool NAZA_parse_gps(void)
         *gpsPacketLogChar = LOG_UBLOX_POSLLH;
         uint8_t mask = _buffernaza.nav.mask;
 
-        uint32_t time = decodeLong(_buffernaza.nav.time, mask);
-        uint32_t second = time & 0b00111111; time >>= 6;
-        uint32_t minute = time & 0b00111111; time >>= 6;
-        uint32_t hour = time & 0b00001111; time >>= 4;
-        uint32_t day = time & 0b00011111; time >>= 5;
-        uint32_t month = time & 0b00001111; time >>= 4;
-        uint32_t year = time & 0b01111111;
+        //uint32_t time = decodeLong(_buffernaza.nav.time, mask);
+        //uint32_t second = time & 0b00111111; time >>= 6;
+        //uint32_t minute = time & 0b00111111; time >>= 6;
+        //uint32_t hour = time & 0b00001111; time >>= 4;
+        //uint32_t day = time & 0b00011111; time >>= 5;
+        //uint32_t month = time & 0b00001111; time >>= 4;
+        //uint32_t year = time & 0b01111111;
 
         GPS_coord[LON] = decodeLong(_buffernaza.nav.longitude, mask);
         GPS_coord[LAT] = decodeLong(_buffernaza.nav.latitude, mask);
         GPS_altitude = decodeLong(_buffernaza.nav.altitude_msl, mask) / 1000.0f;  //alt in m
 
         uint8_t fixType = _buffernaza.nav.fix_type ^ mask;
-        uint8_t fixFlags = _buffernaza.nav.fix_status ^ mask;
+        //uint8_t fixFlags = _buffernaza.nav.fix_status ^ mask;
 
-        uint8_t r3 = _buffernaza.nav.reserved3 ^ mask;
-        uint8_t r4 = _buffernaza.nav.reserved4 ^ mask;
-        uint8_t r5 = _buffernaza.nav.reserved5 ^ mask;
-        uint8_t r6 = _buffernaza.nav.reserved6 ^ mask;
+        //uint8_t r3 = _buffernaza.nav.reserved3 ^ mask;
+        //uint8_t r4 = _buffernaza.nav.reserved4 ^ mask;
+        //uint8_t r5 = _buffernaza.nav.reserved5 ^ mask;
+        //uint8_t r6 = _buffernaza.nav.reserved6 ^ mask;
 
         next_fix = (fixType == FIX_3D);
         if (next_fix) {
@@ -1304,26 +1304,27 @@ static bool NAZA_parse_gps(void)
         } else {
             DISABLE_STATE(GPS_FIX);
         }
-        uint32_t h_acc = decodeLong(_buffernaza.nav.h_acc, mask); // mm
-        uint32_t v_acc = decodeLong(_buffernaza.nav.v_acc, mask); // mm
-        uint32_t test = decodeLong(_buffernaza.nav.reserved, mask);
+        //uint32_t h_acc = decodeLong(_buffernaza.nav.h_acc, mask); // mm
+        //uint32_t v_acc = decodeLong(_buffernaza.nav.v_acc, mask); // mm
+        //uint32_t test = decodeLong(_buffernaza.nav.reserved, mask);
 
-        GPS_VELNED[0]=decodeLong(_buffernaza.nav.ned_north, mask)*10;  // mm/s
-        GPS_VELNED[1]=decodeLong(_buffernaza.nav.ned_east, mask)*10;   // mm/s
-        GPS_VELNED[2]=decodeLong(_buffernaza.nav.ned_down, mask)*10;   // mm/s
+        GPS_VELNED[X]=decodeLong(_buffernaza.nav.ned_north, mask);  // cm/s
+        GPS_VELNED[Y]=decodeLong(_buffernaza.nav.ned_east, mask);   // cm/s
+        GPS_VELNED[Z]=decodeLong(_buffernaza.nav.ned_down, mask);   // cm/s
 
 
-        uint16_t pdop = decodeShort(_buffernaza.nav.pdop, mask); // pdop
-        uint16_t vdop = decodeShort(_buffernaza.nav.vdop, mask); // vdop
+        //uint16_t pdop = decodeShort(_buffernaza.nav.pdop, mask); // pdop
+        //uint16_t vdop = decodeShort(_buffernaza.nav.vdop, mask); // vdop
         uint16_t ndop = decodeShort(_buffernaza.nav.ndop, mask);
         uint16_t edop = decodeShort(_buffernaza.nav.edop, mask);
 
         GPS_numSat = _buffernaza.nav.satellites;
         GPS_hdop = sqrtf(powf(ndop,2)+powf(edop,2));
-        GPS_speed = sqrtf(powf(GPS_VELNED[0],2)+powf(GPS_VELNED[1],2)); //mm/s
-        //GPS_ground_course = (uint16_t) (_buffer.pvt.heading_2d / 10000);     // Heading 2D deg * 100000 rescaled to deg * 10
-        //GPS_numSat = _buffer.pvt.satellites;
-        //GPS_hdop = _buffer.pvt.position_DOP;
+        GPS_speed = sqrtf(powf(GPS_VELNED[X],2)+powf(GPS_VELNED[Y],2)); //cm/s
+
+        // calculate gps heading from VELNE
+        //GPS_ground_course = (uint16_t) (fmod(RADIANS_TO_DECIDEGREES(atan2_approx(GPS_VELNED[Y], GPS_VELNED[X]))*10.0f+3600.0f,3600.0f));
+
         _new_position = true;
         _new_speed = true;
         break;
@@ -1366,11 +1367,12 @@ void nazaGPSInit()
     UNUSED(ack);
 }
 
-void nazaGPSRead(int16_t *magData)
+bool nazaGPSRead(int16_t *magData)
 {
     magData[X] = GPS_MAG[0];
     magData[Y] = GPS_MAG[1];
     magData[Z] = GPS_MAG[2];
+    return true;
 }
 
 bool nazaGPSdetect(mag_t *mag)
@@ -1479,14 +1481,14 @@ void gpsEnablePassthrough(serialPort_t *gpsPassthroughPort)
 #endif
     char c;
     while(1) {
-        if (serialTotalBytesWaiting(gpsPort)) {
+        if (serialRxBytesWaiting(gpsPort)) {
             LED0_ON;
             c = serialRead(gpsPort);
             gpsNewData(c);
             serialWrite(gpsPassthroughPort, c);
             LED0_OFF;
         }
-        if (serialTotalBytesWaiting(gpsPassthroughPort)) {
+        if (serialRxBytesWaiting(gpsPassthroughPort)) {
             LED1_ON;
             serialWrite(gpsPort, serialRead(gpsPassthroughPort));
             LED1_OFF;

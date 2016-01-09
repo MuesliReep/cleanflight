@@ -30,7 +30,7 @@
 
 #define USABLE_TIMER_CHANNEL_COUNT 17
 
-#define EXTI15_10_CALLBACK_HANDLER_COUNT 2 // MPU data ready and MAG data ready
+#define EXTI_CALLBACK_HANDLER_COUNT 2 // MPU data ready and MAG data ready
 
 #define USE_MPU_DATA_READY_SIGNAL
 #define ENSURE_MPU_DATA_READY_IS_LOW
@@ -160,12 +160,14 @@
 #define WS2811_DMA_CHANNEL              DMA1_Channel2
 #define WS2811_IRQ                      DMA1_Channel2_IRQn
 
-#define GPS
 #define BLACKBOX
-#define TELEMETRY
-#define SERIAL_RX
-#define AUTOTUNE
+#define ENABLE_BLACKBOX_LOGGING_ON_SPIFLASH_BY_DEFAULT
+
 #define DISPLAY
+#define GPS
+#define GTUNE
+#define SERIAL_RX
+#define TELEMETRY
 #define UG2864_BUS I2C_DEVICE_INT
 
 #define USE_SERVOS
@@ -175,3 +177,10 @@
 // USART3,
 #define BIND_PORT  GPIOB
 #define BIND_PIN   Pin_11
+
+#define USE_SERIAL_1WIRE
+
+#define S1W_TX_GPIO         GPIOA
+#define S1W_TX_PIN          GPIO_Pin_9
+#define S1W_RX_GPIO         GPIOA
+#define S1W_RX_PIN          GPIO_Pin_10

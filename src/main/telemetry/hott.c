@@ -193,8 +193,8 @@ void hottPrepareGPSResponse(HOTT_GPS_MSG_t *hottGPSMessage)
 
     addGPSCoordinates(hottGPSMessage, GPS_coord[LAT], GPS_coord[LON]);
 
-    // GPS Speed in km/h
-    uint16_t speed = (GPS_speed * 36) / 100; // 0->1m/s * 0->36 = km/h
+    // GPS Speed is returned in cm/s (from io/gps.c) and must be sent in km/h (Hott requirement)
+    uint16_t speed = (GPS_speed * 36) / 1000;
     hottGPSMessage->gps_speed_L = speed & 0x00FF;
     hottGPSMessage->gps_speed_H = speed >> 8;
 
@@ -374,7 +374,7 @@ static void processBinaryModeRequest(uint8_t address) {
 
 static void flushHottRxBuffer(void)
 {
-    while (serialTotalBytesWaiting(hottPort) > 0) {
+    while (serialRxBytesWaiting(hottPort) > 0) {
         serialRead(hottPort);
     }
 }
@@ -383,7 +383,7 @@ static void hottCheckSerialData(uint32_t currentMicros)
 {
     static bool lookingForRequest = true;
 
-    uint8_t bytesWaiting = serialTotalBytesWaiting(hottPort);
+    uint8_t bytesWaiting = serialRxBytesWaiting(hottPort);
 
     if (bytesWaiting <= 1) {
         return;
@@ -423,13 +423,19 @@ static void hottCheckSerialData(uint32_t currentMicros)
     }
 }
 
+static void workAroundForHottTelemetryOnUsart(serialPort_t *instance, portMode_t mode) {
+	closeSerialPort(hottPort);
+	hottPort = openSerialPort(instance->identifier, FUNCTION_TELEMETRY_HOTT, NULL, HOTT_BAUDRATE, mode, SERIAL_NOT_INVERTED);
+}
+
 static void hottSendTelemetryData(void) {
     if (!hottIsSending) {
         hottIsSending = true;
         // FIXME temorary workaround for HoTT not working on Hardware serial ports due to hardware/softserial serial port initialisation differences
-        //serialSetMode(hottPort, MODE_TX);
-        closeSerialPort(hottPort);
-        hottPort = openSerialPort(portConfig->identifier, FUNCTION_TELEMETRY_HOTT, NULL, HOTT_BAUDRATE, MODE_TX, SERIAL_NOT_INVERTED);
+        if ((portConfig->identifier == SERIAL_PORT_USART1) || (portConfig->identifier == SERIAL_PORT_USART2) || (portConfig->identifier == SERIAL_PORT_USART3))
+        	workAroundForHottTelemetryOnUsart(hottPort, MODE_TX);
+        else
+        	serialSetMode(hottPort, MODE_TX);
         hottMsgCrc = 0;
         return;
     }
@@ -437,11 +443,11 @@ static void hottSendTelemetryData(void) {
     if (hottMsgRemainingBytesToSendCount == 0) {
         hottMsg = NULL;
         hottIsSending = false;
-
         // FIXME temorary workaround for HoTT not working on Hardware serial ports due to hardware/softserial serial port initialisation differences
-        //serialSetMode(hottPort, MODE_RX);
-        closeSerialPort(hottPort);
-        hottPort = openSerialPort(portConfig->identifier, FUNCTION_TELEMETRY_HOTT, NULL, HOTT_BAUDRATE, MODE_RX, SERIAL_NOT_INVERTED);
+        if ((portConfig->identifier == SERIAL_PORT_USART1) || (portConfig->identifier == SERIAL_PORT_USART2) || (portConfig->identifier == SERIAL_PORT_USART3))
+        	workAroundForHottTelemetryOnUsart(hottPort, MODE_RX);
+        else
+        	serialSetMode(hottPort, MODE_RX);
         flushHottRxBuffer();
         return;
     }

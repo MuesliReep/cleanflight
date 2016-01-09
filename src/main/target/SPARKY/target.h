@@ -48,7 +48,7 @@
 #define USE_MAG_AK8975
 #define AK8975_BUS I2C_DEVICE_INT
 
-#define MAG_AK8975_ALIGN CW0_DEG_FLIP
+#define MAG_AK8975_ALIGN CW180_DEG_FLIP
 
 #define LED0
 #define LED1
@@ -110,14 +110,14 @@
 #define CURRENT_METER_ADC_GPIO_PIN  GPIO_Pin_7
 #define CURRENT_METER_ADC_CHANNEL   ADC_Channel_4
 
-#define AUTOTUNE
 #define BLACKBOX
-#define TELEMETRY
-#define SERIAL_RX
 #define GPS
+#define GTUNE
 #define DISPLAY
 #define UG2864_BUS I2C_DEVICE_INT
 
+#define SERIAL_RX
+#define TELEMETRY
 #define USE_SERVOS
 #define USE_CLI
 
@@ -155,6 +155,12 @@
 #define WS2811_IRQ                      DMA1_Channel7_IRQn
 #endif
 
+#define USE_SERIAL_1WIRE
+
+#define S1W_TX_GPIO         GPIOB
+#define S1W_TX_PIN          GPIO_Pin_6
+#define S1W_RX_GPIO         GPIOB
+#define S1W_RX_PIN          GPIO_Pin_7
 
 #define SPEKTRUM_BIND
 // USART2, PA3

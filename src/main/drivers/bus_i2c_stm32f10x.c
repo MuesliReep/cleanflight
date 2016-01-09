@@ -42,7 +42,7 @@ static void i2c_er_handler(I2CDevice bus);
 static void i2c_ev_handler(I2CDevice bus);
 static void i2cUnstick(I2CDevice bus);
 
-typedef struct i2cDevice_t {
+typedef struct i2cDevice_s {
     I2C_TypeDef *dev;
     GPIO_TypeDef *gpio;
     uint16_t scl;
@@ -56,6 +56,16 @@ static const i2cDevice_t i2cHardwareMap[] = {
     { I2C1, GPIOB, Pin_6, Pin_7, I2C1_EV_IRQn, I2C1_ER_IRQn, RCC_APB1Periph_I2C1 },
     { I2C2, GPIOB, Pin_10, Pin_11, I2C2_EV_IRQn, I2C2_ER_IRQn, RCC_APB1Periph_I2C2 },
 };
+
+// Copy of peripheral address for IRQ routines
+static I2C_TypeDef *I2Cx = NULL;
+// Copy of device index for reinit, etc purposes
+static I2CDevice I2Cx_index;
+static bool i2cOverClock;
+
+void i2cSetOverclock(uint8_t OverClock) {
+    i2cOverClock = (OverClock) ? true : false;
+}
 
 void I2C1_ER_IRQHandler(void)
 {
@@ -339,7 +349,13 @@ void i2cInit(I2CDevice index)
     i2c.I2C_Mode = I2C_Mode_I2C;
     i2c.I2C_DutyCycle = I2C_DutyCycle_2;
     i2c.I2C_AcknowledgedAddress = I2C_AcknowledgedAddress_7bit;
-    i2c.I2C_ClockSpeed = 400000;
+
+    if (i2cOverClock) {
+        i2c.I2C_ClockSpeed = 800000; // 800khz Maximum speed tested on various boards without issues
+    } else {
+        i2c.I2C_ClockSpeed = 400000; // 400khz Operation according specs
+    }
+
     I2C_Cmd(I2Cx, ENABLE);
     I2C_Init(I2Cx, &i2c);
 

@@ -89,6 +89,12 @@ static volatile uint16_t i2cErrorCount = 0;
 // I2C TimeoutUserCallback
 ///////////////////////////////////////////////////////////////////////////////
 
+static bool i2cOverClock;
+
+void i2cSetOverclock(uint8_t OverClock) {
+    i2cOverClock = (OverClock) ? true : false;
+}
+
 uint32_t i2cTimeoutUserCallback(I2C_TypeDef *I2Cx)
 {
     i2cErrorCount++;
@@ -115,10 +121,10 @@ void i2cInitPort(I2CDevice bus)
 
 	// Init pins
 
-	GPIO_InitStructure.GPIO_Mode = GPIO_Mode_AF;
-	GPIO_InitStructure.GPIO_Speed = GPIO_Speed_50MHz;
-	GPIO_InitStructure.GPIO_OType = GPIO_OType_PP;
-	GPIO_InitStructure.GPIO_PuPd = GPIO_PuPd_NOPULL;
+        GPIO_InitStructure.GPIO_Mode = GPIO_Mode_AF;
+        GPIO_InitStructure.GPIO_Speed = GPIO_Speed_50MHz;
+        GPIO_InitStructure.GPIO_OType = GPIO_OType_OD;
+        GPIO_InitStructure.GPIO_PuPd = GPIO_PuPd_NOPULL;
 
 	GPIO_InitStructure.GPIO_Pin = i2cHardwareMap[bus].scl;
 	GPIO_Init(i2cHardwareMap[bus].gpioscl, &GPIO_InitStructure);
@@ -128,14 +134,18 @@ void i2cInitPort(I2CDevice bus)
 
 	I2C_StructInit(&I2C_InitStructure);
 
-	I2C_InitStructure.I2C_Mode = I2C_Mode_I2C;
-	I2C_InitStructure.I2C_AnalogFilter = I2C_AnalogFilter_Enable;
-	I2C_InitStructure.I2C_DigitalFilter = 0x00;
-	I2C_InitStructure.I2C_OwnAddress1 = 0x00;
-	I2C_InitStructure.I2C_Ack = I2C_Ack_Enable;
-	I2C_InitStructure.I2C_AcknowledgedAddress = I2C_AcknowledgedAddress_7bit;
-	I2C_InitStructure.I2C_Timing = 0x00E0257A; // 400 Khz, 72Mhz Clock, Analog Filter Delay ON, Rise 100, Fall 10.
-	//I2C_InitStructure.I2C_Timing              = 0x8000050B;
+        I2C_InitStructure.I2C_Mode = I2C_Mode_I2C;
+        I2C_InitStructure.I2C_AnalogFilter = I2C_AnalogFilter_Enable;
+        I2C_InitStructure.I2C_DigitalFilter = 0x00;
+        I2C_InitStructure.I2C_OwnAddress1 = 0x00;
+        I2C_InitStructure.I2C_Ack = I2C_Ack_Enable;
+        I2C_InitStructure.I2C_AcknowledgedAddress = I2C_AcknowledgedAddress_7bit;
+        if (i2cOverClock) {
+            I2C_InitStructure.I2C_Timing = 0x00500E30; // 1000 Khz, 72Mhz Clock, Analog Filter Delay ON, Setup 40, Hold 4.
+        } else {
+            I2C_InitStructure.I2C_Timing = 0x00E0257A; // 400 Khz, 72Mhz Clock, Analog Filter Delay ON, Rise 100, Fall 10
+        }
+        //I2C_InitStructure.I2C_Timing              = 0x8000050B;
 
 	I2C_Init(I2Cx, &I2C_InitStructure);
 

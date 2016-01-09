@@ -323,7 +323,6 @@ static const uint16_t airPWM[] = {
     // TODO
     0xFFFF
 };
-
 #endif
 
 #ifdef ANYFC
@@ -631,12 +630,56 @@ static const uint16_t airPWM[] = {
 };
 #endif
 
+#if defined(MOTOLAB)
+static const uint16_t multiPPM[] = {
+    PWM9  | (MAP_TO_PPM_INPUT << 8), // PPM input
+
+    PWM1  | (MAP_TO_MOTOR_OUTPUT << 8),
+    PWM2  | (MAP_TO_MOTOR_OUTPUT << 8),
+    PWM3  | (MAP_TO_MOTOR_OUTPUT << 8),
+    PWM4  | (MAP_TO_MOTOR_OUTPUT << 8),
+    PWM5  | (MAP_TO_MOTOR_OUTPUT << 8),
+    PWM6  | (MAP_TO_MOTOR_OUTPUT << 8),
+    PWM7  | (MAP_TO_MOTOR_OUTPUT << 8),
+    PWM8  | (MAP_TO_MOTOR_OUTPUT << 8),
+    0xFFFF
+};
+
+static const uint16_t multiPWM[] = {
+    PWM1  | (MAP_TO_MOTOR_OUTPUT << 8),
+    PWM2  | (MAP_TO_MOTOR_OUTPUT << 8),
+    PWM3  | (MAP_TO_MOTOR_OUTPUT << 8),
+    PWM4  | (MAP_TO_MOTOR_OUTPUT << 8),
+    PWM5  | (MAP_TO_MOTOR_OUTPUT << 8),
+    PWM6  | (MAP_TO_MOTOR_OUTPUT << 8),
+    PWM7  | (MAP_TO_MOTOR_OUTPUT << 8),
+    PWM8  | (MAP_TO_MOTOR_OUTPUT << 8),
+    0xFFFF
+};
+
+static const uint16_t airPPM[] = {
+    // TODO
+    0xFFFF
+};
+
+static const uint16_t airPWM[] = {
+    // TODO
+    0xFFFF
+};
+#endif
+
 static const uint16_t * const hardwareMaps[] = {
     multiPWM,
     multiPPM,
     airPWM,
     airPPM,
 };
+
+static pwmOutputConfiguration_t pwmOutputConfiguration;
+
+pwmOutputConfiguration_t *pwmGetOutputConfiguration(void){
+    return &pwmOutputConfiguration;
+}
 
 pwmOutputConfiguration_t *pwmInit(drv_pwm_config_t *init)
 {
@@ -645,7 +688,6 @@ pwmOutputConfiguration_t *pwmInit(drv_pwm_config_t *init)
 
     int channelIndex = 0;
 
-    static pwmOutputConfiguration_t pwmOutputConfiguration;
 
     memset(&pwmOutputConfiguration, 0, sizeof(pwmOutputConfiguration));
 
@@ -763,6 +805,12 @@ pwmOutputConfiguration_t *pwmInit(drv_pwm_config_t *init)
                 type = MAP_TO_SERVO_OUTPUT;
 #endif
 
+#if defined(CC3D)
+            // remap 10 as servo
+            if (timerIndex == PWM10 && timerHardwarePtr->tim == TIM1)
+                type = MAP_TO_SERVO_OUTPUT;
+#endif
+
 #if defined(SPARKY)
             // remap PWM1+2 as servos
             if ((timerIndex == PWM1 || timerIndex == PWM2) && timerHardwarePtr->tim == TIM15)
@@ -784,6 +832,12 @@ pwmOutputConfiguration_t *pwmInit(drv_pwm_config_t *init)
                 if (timerIndex == PWM9 || timerIndex == PWM10)
                     type = MAP_TO_SERVO_OUTPUT;
             }
+#endif
+
+#if defined(MOTOLAB)
+            // remap PWM 7+8 as servos
+            if (timerIndex == PWM7 || timerIndex == PWM8)
+                type = MAP_TO_SERVO_OUTPUT;
 #endif
         }
 
@@ -831,18 +885,39 @@ pwmOutputConfiguration_t *pwmInit(drv_pwm_config_t *init)
             pwmInConfig(timerHardwarePtr, channelIndex);
             channelIndex++;
         } else if (type == MAP_TO_MOTOR_OUTPUT) {
+
             if (init->useOneshot) {
+
                 pwmOneshotMotorConfig(timerHardwarePtr, pwmOutputConfiguration.motorCount);
+                pwmOutputConfiguration.portConfigurations[pwmOutputConfiguration.outputCount].flags = PWM_PF_MOTOR | PWM_PF_OUTPUT_PROTOCOL_ONESHOT|PWM_PF_OUTPUT_PROTOCOL_PWM;
+
             } else if (isMotorBrushed(init->motorPwmRate)) {
+
                 pwmBrushedMotorConfig(timerHardwarePtr, pwmOutputConfiguration.motorCount, init->motorPwmRate, init->idlePulse);
+                pwmOutputConfiguration.portConfigurations[pwmOutputConfiguration.outputCount].flags = PWM_PF_MOTOR | PWM_PF_MOTOR_MODE_BRUSHED | PWM_PF_OUTPUT_PROTOCOL_PWM;
+
             } else {
+
                 pwmBrushlessMotorConfig(timerHardwarePtr, pwmOutputConfiguration.motorCount, init->motorPwmRate, init->idlePulse);
+                pwmOutputConfiguration.portConfigurations[pwmOutputConfiguration.outputCount].flags = PWM_PF_MOTOR | PWM_PF_OUTPUT_PROTOCOL_PWM ;
             }
+
+            pwmOutputConfiguration.portConfigurations[pwmOutputConfiguration.outputCount].index = pwmOutputConfiguration.motorCount;
+            pwmOutputConfiguration.portConfigurations[pwmOutputConfiguration.outputCount].timerHardware = timerHardwarePtr;
+
             pwmOutputConfiguration.motorCount++;
+            pwmOutputConfiguration.outputCount++;
+
         } else if (type == MAP_TO_SERVO_OUTPUT) {
 #ifdef USE_SERVOS
             pwmServoConfig(timerHardwarePtr, pwmOutputConfiguration.servoCount, init->servoPwmRate, init->servoCenterPulse);
+
+            pwmOutputConfiguration.portConfigurations[pwmOutputConfiguration.outputCount].flags = PWM_PF_SERVO | PWM_PF_OUTPUT_PROTOCOL_PWM;
+            pwmOutputConfiguration.portConfigurations[pwmOutputConfiguration.outputCount].index = pwmOutputConfiguration.servoCount;
+            pwmOutputConfiguration.portConfigurations[pwmOutputConfiguration.outputCount].timerHardware = timerHardwarePtr;
+
             pwmOutputConfiguration.servoCount++;
+            pwmOutputConfiguration.outputCount++;
 #endif
         }
     }

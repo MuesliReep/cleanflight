@@ -113,7 +113,7 @@ void mixerInit(mixerMode_e mixerMode, motorMixer_t *customMotorMixers, servoMixe
 void mixerInit(mixerMode_e mixerMode, motorMixer_t *customMotorMixers);
 #endif
 void mixerUsePWMOutputConfiguration(pwmOutputConfiguration_t *pwmOutputConfiguration);
-void rxInit(rxConfig_t *rxConfig);
+void rxInit(rxConfig_t *rxConfig, modeActivationCondition_t *modeActivationConditions);
 void gpsInit(serialConfig_t *serialConfig, gpsConfig_t *initialGpsConfig);
 void navigationInit(gpsProfile_t *initialGpsProfile, pidProfile_t *pidProfile);
 void imuInit(void);
@@ -177,6 +177,7 @@ void init(void)
 #ifdef STM32F40_41xxx
     SetSysClock();
 #endif
+    i2cSetOverclock(masterConfig.i2c_overclock);
 
 #ifdef USE_HARDWARE_REVISION_DETECTION
     detectHardwareRevision();
@@ -393,7 +394,10 @@ void init(void)
     }
 #endif
 
-    if (!sensorsAutodetect(&masterConfig.sensorAlignmentConfig, masterConfig.gyro_lpf, masterConfig.acc_hardware, masterConfig.mag_hardware, masterConfig.baro_hardware, currentProfile->mag_declination)) {
+    if (!sensorsAutodetect(&masterConfig.sensorAlignmentConfig, masterConfig.gyro_lpf,
+        masterConfig.acc_hardware, masterConfig.mag_hardware, masterConfig.baro_hardware, currentProfile->mag_declination,
+        masterConfig.looptime, masterConfig.gyroSync, masterConfig.gyroSyncDenominator)) {
+
         // if gyro was not detected due to whatever reason, we give up now.
         failureMode(FAILURE_MISSING_ACC);
     }
@@ -428,7 +432,7 @@ void init(void)
 
     failsafeInit(&masterConfig.rxConfig, masterConfig.flight3DConfig.deadband3d_throttle);
 
-    rxInit(&masterConfig.rxConfig);
+    rxInit(&masterConfig.rxConfig, currentProfile->modeActivationConditions);
 
 #ifdef GPS
     if (feature(FEATURE_GPS)) {
@@ -542,7 +546,7 @@ void init(void)
 void processLoopback(void) {
     if (loopbackPort) {
         uint8_t bytesWaiting;
-        while ((bytesWaiting = serialTotalBytesWaiting(loopbackPort))) {
+        while ((bytesWaiting = serialRxBytesWaiting(loopbackPort))) {
             uint8_t b = serialRead(loopbackPort);
             serialWrite(loopbackPort, b);
         };

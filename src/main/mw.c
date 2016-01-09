@@ -25,6 +25,8 @@
 #include "common/maths.h"
 #include "common/axis.h"
 #include "common/color.h"
+#include "common/utils.h"
+#include "common/filter.h"
 
 #include "drivers/sensor.h"
 #include "drivers/accgyro.h"
@@ -36,6 +38,7 @@
 #include "drivers/serial.h"
 #include "drivers/timer.h"
 #include "drivers/pwm_rx.h"
+#include "drivers/gyro_sync.h"
 
 #include "sensors/sensors.h"
 #include "sensors/boardalignment.h"
@@ -71,10 +74,8 @@
 #include "flight/imu.h"
 #include "flight/altitudehold.h"
 #include "flight/failsafe.h"
-#include "flight/autotune.h"
+#include "flight/gtune.h"
 #include "flight/navigation.h"
-#include "flight/filter.h"
-
 
 #include "config/runtime_config.h"
 #include "config/config.h"
@@ -90,13 +91,15 @@ enum {
 };
 
 /* VBAT monitoring interval (in microseconds) - 1s*/
-#define VBATINTERVAL (6 * 3500)       
+#define VBATINTERVAL (6 * 3500)
 /* IBat monitoring interval (in microseconds) - 6 default looptimes */
-#define IBATINTERVAL (6 * 3500)       
+#define IBATINTERVAL (6 * 3500)
+#define GYRO_WATCHDOG_DELAY 100  // Watchdog for boards without interrupt for gyro
 
 uint32_t currentTime = 0;
 uint32_t previousTime = 0;
 uint16_t cycleTime = 0;         // this is the number in micro second to achieve a full loop, it can differ a little and is taken into account in the PID loop
+float dT;
 
 int16_t magHold;
 int16_t headFreeModeHold;
@@ -123,40 +126,26 @@ void applyAndSaveAccelerometerTrimsDelta(rollAndPitchTrims_t *rollAndPitchTrimsD
     saveConfigAndNotify();
 }
 
-#ifdef AUTOTUNE
+#ifdef GTUNE
 
-void updateAutotuneState(void)
+void updateGtuneState(void)
 {
-    static bool landedAfterAutoTuning = false;
-    static bool autoTuneWasUsed = false;
+    static bool GTuneWasUsed = false;
 
-    if (IS_RC_MODE_ACTIVE(BOXAUTOTUNE)) {
-        if (!FLIGHT_MODE(AUTOTUNE_MODE)) {
-            if (ARMING_FLAG(ARMED)) {
-                if (isAutotuneIdle() || landedAfterAutoTuning) {
-                    autotuneReset();
-                    landedAfterAutoTuning = false;
-                }
-                autotuneBeginNextPhase(&currentProfile->pidProfile);
-                ENABLE_FLIGHT_MODE(AUTOTUNE_MODE);
-                autoTuneWasUsed = true;
-            } else {
-                if (havePidsBeenUpdatedByAutotune()) {
-                    saveConfigAndNotify();
-                    autotuneReset();
-                }
-            }
+    if (IS_RC_MODE_ACTIVE(BOXGTUNE)) {
+        if (!FLIGHT_MODE(GTUNE_MODE) && ARMING_FLAG(ARMED)) {
+            ENABLE_FLIGHT_MODE(GTUNE_MODE);
+            init_Gtune(&currentProfile->pidProfile);
+            GTuneWasUsed = true;
         }
-        return;
-    }
-
-    if (FLIGHT_MODE(AUTOTUNE_MODE)) {
-        autotuneEndPhase();
-        DISABLE_FLIGHT_MODE(AUTOTUNE_MODE);
-    }
-
-    if (!ARMING_FLAG(ARMED) && autoTuneWasUsed) {
-        landedAfterAutoTuning = true;
+        if (!FLIGHT_MODE(GTUNE_MODE) && !ARMING_FLAG(ARMED) && GTuneWasUsed) {
+            saveConfigAndNotify();
+            GTuneWasUsed = false;
+        }
+    } else {
+        if (FLIGHT_MODE(GTUNE_MODE) && ARMING_FLAG(ARMED)) {
+            DISABLE_FLIGHT_MODE(GTUNE_MODE);
+        }
     }
 }
 #endif
@@ -242,7 +231,7 @@ void annexCode(void)
     rcCommand[THROTTLE] = lookupThrottleRC[tmp2] + (tmp - tmp2 * 100) * (lookupThrottleRC[tmp2 + 1] - lookupThrottleRC[tmp2]) / 100;    // [0;1000] -> expo -> [MINTHROTTLE;MAXTHROTTLE]
 
     if (FLIGHT_MODE(HEADFREE_MODE)) {
-        float radDiff = degreesToRadians(heading - headFreeModeHold);
+        float radDiff = degreesToRadians(DECIDEGREES_TO_DEGREES(attitude.values.yaw) - headFreeModeHold);
         float cosDiff = cos_approx(radDiff);
         float sinDiff = sin_approx(radDiff);
         int16_t rcCommand_PITCH = rcCommand[PITCH] * cosDiff + rcCommand[ROLL] * sinDiff;
@@ -251,14 +240,14 @@ void annexCode(void)
     }
 
     if (feature(FEATURE_VBAT)) {
-        if ((int32_t)(currentTime - vbatLastServiced) >= VBATINTERVAL) {
+        if (cmp32(currentTime, vbatLastServiced) >= VBATINTERVAL) {
             vbatLastServiced = currentTime;
             updateBattery();
         }
     }
 
     if (feature(FEATURE_CURRENT_METER)) {
-        int32_t ibatTimeSinceLastServiced = (int32_t) (currentTime - ibatLastServiced);
+        int32_t ibatTimeSinceLastServiced = cmp32(currentTime, ibatLastServiced);
 
         if (ibatTimeSinceLastServiced >= IBATINTERVAL) {
             ibatLastServiced = currentTime;
@@ -276,10 +265,6 @@ void annexCode(void)
         }
 
         if (!STATE(SMALL_ANGLE)) {
-            DISABLE_ARMING_FLAG(OK_TO_ARM);
-        }
-
-        if (IS_RC_MODE_ACTIVE(BOXAUTOTUNE)) {
             DISABLE_ARMING_FLAG(OK_TO_ARM);
         }
 
@@ -329,7 +314,7 @@ void mwDisarm(void)
     }
 }
 
-#define TELEMETRY_FUNCTION_MASK (FUNCTION_TELEMETRY_FRSKY | FUNCTION_TELEMETRY_HOTT | FUNCTION_TELEMETRY_MSP | FUNCTION_TELEMETRY_SMARTPORT)
+#define TELEMETRY_FUNCTION_MASK (FUNCTION_TELEMETRY_FRSKY | FUNCTION_TELEMETRY_HOTT | FUNCTION_TELEMETRY_SMARTPORT | FUNCTION_TELEMETRY_LTM)
 
 void releaseSharedTelemetryPorts(void) {
     serialPort_t *sharedPort = findSharedSerialPort(TELEMETRY_FUNCTION_MASK, FUNCTION_MSP);
@@ -350,7 +335,7 @@ void mwArm(void)
         }
         if (!ARMING_FLAG(PREVENT_ARMING)) {
             ENABLE_ARMING_FLAG(ARMED);
-            headFreeModeHold = heading;
+            headFreeModeHold = DECIDEGREES_TO_DEGREES(attitude.values.yaw);
 
 #ifdef BLACKBOX
             if (feature(FEATURE_BLACKBOX)) {
@@ -411,7 +396,7 @@ void updateInflightCalibrationState(void)
         InflightcalibratingA = 50;
         AccInflightCalibrationArmed = false;
     }
-    if (IS_RC_MODE_ACTIVE(BOXCALIB)) {      // Use the Calib Option to activate : Calib = TRUE Meausrement started, Land and Calib = 0 measurement stored
+    if (IS_RC_MODE_ACTIVE(BOXCALIB)) {      // Use the Calib Option to activate : Calib = TRUE measurement started, Land and Calib = 0 measurement stored
         if (!AccInflightCalibrationActive && !AccInflightCalibrationMeasurementDone)
             InflightcalibratingA = 50;
         AccInflightCalibrationActive = true;
@@ -423,8 +408,8 @@ void updateInflightCalibrationState(void)
 
 void updateMagHold(void)
 {
-    if (ABS(rcCommand[YAW]) < 70 && FLIGHT_MODE(MAG_MODE)) {
-        int16_t dif = heading - magHold;
+    if (ABS(rcCommand[YAW]) < 15 && FLIGHT_MODE(MAG_MODE)) {
+        int16_t dif = DECIDEGREES_TO_DEGREES(attitude.values.yaw) - magHold;
         if (dif <= -180)
             dif += 360;
         if (dif >= +180)
@@ -433,7 +418,7 @@ void updateMagHold(void)
         if (STATE(SMALL_ANGLE))
             rcCommand[YAW] -= dif * currentProfile->pidProfile.P8[PIDMAG] / 30;    // 18 deg
     } else
-        magHold = heading;
+        magHold = DECIDEGREES_TO_DEGREES(attitude.values.yaw);
 }
 
 typedef enum {
@@ -497,16 +482,14 @@ void executePeriodicTasks(void)
 #endif
 #if defined(BARO) || defined(SONAR)
     case CALCULATE_ALTITUDE_TASK:
-
-#if defined(BARO) && !defined(SONAR)
-        if (sensors(SENSOR_BARO) && isBaroReady()) {
+        if (false
+#if defined(BARO)
+            || (sensors(SENSOR_BARO) && isBaroReady())
 #endif
-#if defined(BARO) && defined(SONAR)
-        if ((sensors(SENSOR_BARO) && isBaroReady()) || sensors(SENSOR_SONAR)) {
+#if defined(SONAR)
+            || sensors(SENSOR_SONAR)
 #endif
-#if !defined(BARO) && defined(SONAR)
-        if (sensors(SENSOR_SONAR)) {
-#endif
+            ) {
             calculateEstimatedAltitude(currentTime);
         }
         break;
@@ -623,7 +606,7 @@ void processRx(void)
 
     if ((IS_RC_MODE_ACTIVE(BOXANGLE) || (feature(FEATURE_FAILSAFE) && failsafeIsActive())) && (sensors(SENSOR_ACC))) {
         // bumpless transfer to Level mode
-    	canUseHorizonMode = false;
+        canUseHorizonMode = false;
 
         if (!FLIGHT_MODE(ANGLE_MODE)) {
             pidResetErrorAngle();
@@ -656,7 +639,7 @@ void processRx(void)
         if (IS_RC_MODE_ACTIVE(BOXMAG)) {
             if (!FLIGHT_MODE(MAG_MODE)) {
                 ENABLE_FLIGHT_MODE(MAG_MODE);
-                magHold = heading;
+                magHold = DECIDEGREES_TO_DEGREES(attitude.values.yaw);
             }
         } else {
             DISABLE_FLIGHT_MODE(MAG_MODE);
@@ -669,7 +652,7 @@ void processRx(void)
             DISABLE_FLIGHT_MODE(HEADFREE_MODE);
         }
         if (IS_RC_MODE_ACTIVE(BOXHEADADJ)) {
-            headFreeModeHold = heading; // acquire new heading
+            headFreeModeHold = DECIDEGREES_TO_DEGREES(attitude.values.yaw); // acquire new heading
         }
     }
 #endif
@@ -706,6 +689,21 @@ void processRx(void)
 
 }
 
+// Function for loop trigger
+bool shouldRunLoop(uint32_t loopTime) {
+	bool loopTrigger = false;
+
+    if (masterConfig.gyroSync) {
+        if (gyroSyncCheckUpdate() || (int32_t)(currentTime - (loopTime + GYRO_WATCHDOG_DELAY)) >= 0) {
+            loopTrigger = true;
+        }
+    } else if (masterConfig.looptime == 0 || (int32_t)(currentTime - loopTime) >= 0){
+        loopTrigger = true;
+    }
+
+    return loopTrigger;
+}
+
 void filterRc(void){
     static int16_t lastCommand[4] = { 0, 0, 0, 0 };
     static int16_t deltaRC[4] = { 0, 0, 0, 0 };
@@ -714,15 +712,15 @@ void filterRc(void){
     uint16_t rxRefreshRate, filteredCycleTime;
 
     // Set RC refresh rate for sampling and channels to filter
-   	initRxRefreshRate(&rxRefreshRate);
+    initRxRefreshRate(&rxRefreshRate);
 
-    filteredCycleTime = filterApplyPt1(cycleTime, &filteredCycleTimeState, 1);
+    filteredCycleTime = filterApplyPt1(cycleTime, &filteredCycleTimeState, 1, dT);
     rcInterpolationFactor = rxRefreshRate / filteredCycleTime + 1;
 
     if (isRXDataNew) {
         for (int channel=0; channel < 4; channel++) {
-        	deltaRC[channel] = rcData[channel] -  (lastCommand[channel] - deltaRC[channel] * factor / rcInterpolationFactor);
-            lastCommand[channel] = rcData[channel];
+            deltaRC[channel] = rcCommand[channel] -  (lastCommand[channel] - deltaRC[channel] * factor / rcInterpolationFactor);
+            lastCommand[channel] = rcCommand[channel];
         }
 
         isRXDataNew = false;
@@ -731,10 +729,10 @@ void filterRc(void){
         factor--;
     }
 
-    // Interpolate steps of rcData
+    // Interpolate steps of rcCommand
     if (factor > 0) {
         for (int channel=0; channel < 4; channel++) {
-            rcData[channel] = lastCommand[channel] - deltaRC[channel] * factor/rcInterpolationFactor;
+            rcCommand[channel] = lastCommand[channel] - deltaRC[channel] * factor/rcInterpolationFactor;
          }
     } else {
         factor = 0;
@@ -787,8 +785,8 @@ void loop(void)
     }
 
     currentTime = micros();
-    if (masterConfig.looptime == 0 || (int32_t)(currentTime - loopTime) >= 0) {
-        loopTime = currentTime + masterConfig.looptime;
+    if (shouldRunLoop(loopTime)) {
+        loopTime = currentTime + targetLooptime;
 
         imuUpdate(&currentProfile->accelerometerTrims);
 
@@ -797,33 +795,26 @@ void loop(void)
         cycleTime = (int32_t)(currentTime - previousTime);
         previousTime = currentTime;
 
-        // Gyro Low Pass
-        if (currentProfile->pidProfile.gyro_cut_hz) {
-            int axis;
-            static filterStatePt1_t gyroADCState[XYZ_AXIS_COUNT];
+        dT = (float)cycleTime * 0.000001f;
 
-            for (axis = 0; axis < XYZ_AXIS_COUNT; axis++) {
-        	    gyroADC[axis] = filterApplyPt1(gyroADC[axis], &gyroADCState[axis], currentProfile->pidProfile.gyro_cut_hz);
-            }
-        }
+        annexCode();
 
         if (masterConfig.rxConfig.rcSmoothing) {
             filterRc();
         }
 
-        annexCode();
 #if defined(BARO) || defined(SONAR)
         haveProcessedAnnexCodeOnce = true;
 #endif
 
-#ifdef AUTOTUNE
-        updateAutotuneState();
-#endif
-
 #ifdef MAG
         if (sensors(SENSOR_MAG)) {
-        	updateMagHold();
+            updateMagHold();
         }
+#endif
+
+#ifdef GTUNE
+        updateGtuneState();
 #endif
 
 #if defined(BARO) || defined(SONAR)
@@ -840,7 +831,9 @@ void loop(void)
         // Allow yaw control for tricopters if the user wants the servo to move even when unarmed.
         if (isUsingSticksForArming() && rcData[THROTTLE] <= masterConfig.rxConfig.mincheck
 #ifndef USE_QUAD_MIXER_ONLY
+#ifdef USE_SERVOS
                 && !((masterConfig.mixerMode == MIXER_TRI || masterConfig.mixerMode == MIXER_CUSTOM_TRI) && masterConfig.mixerConfig.tri_unarmed_servo)
+#endif
                 && masterConfig.mixerMode != MIXER_AIRPLANE
                 && masterConfig.mixerMode != MIXER_FLYING_WING
 #endif

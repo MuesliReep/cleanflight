@@ -26,6 +26,7 @@
 #include "common/color.h"
 #include "common/axis.h"
 #include "common/maths.h"
+#include "common/filter.h"
 
 #include "drivers/sensor.h"
 #include "drivers/accgyro.h"
@@ -56,6 +57,8 @@
 
 #include "rx/rx.h"
 
+#include "blackbox/blackbox_io.h"
+
 #include "telemetry/telemetry.h"
 
 #include "flight/mixer.h"
@@ -75,8 +78,6 @@
 #define BRUSHLESS_MOTORS_PWM_RATE 400
 
 void useRcControlsConfig(modeActivationCondition_t *modeActivationConditions, escAndServoConfig_t *escAndServoConfigToUse, pidProfile_t *pidProfileToUse);
-
-#define FLASH_TO_RESERVE_FOR_CONFIG 0x1000
 
 #if !defined(FLASH_SIZE)
 #error "Flash size not defined for target. (specify in KB)"
@@ -127,6 +128,12 @@ void useRcControlsConfig(modeActivationCondition_t *modeActivationConditions, es
 #error "Flash page count not defined for target."
 #endif
 
+#if FLASH_SIZE <= 64
+#define FLASH_TO_RESERVE_FOR_CONFIG 0x0800
+#else
+#define FLASH_TO_RESERVE_FOR_CONFIG 0x1000
+#endif
+
 // use the last flash pages for storage
 #define CONFIG_START_FLASH_ADDRESS (0x08000000 + (uint32_t)((FLASH_PAGE_SIZE * FLASH_PAGE_COUNT) - FLASH_TO_RESERVE_FOR_CONFIG))
 
@@ -137,7 +144,7 @@ static uint32_t activeFeaturesLatch = 0;
 static uint8_t currentControlRateProfileIndex = 0;
 controlRateConfig_t *currentControlRateProfile;
 
-static const uint8_t EEPROM_CONF_VERSION = 105;
+static const uint8_t EEPROM_CONF_VERSION = 108;
 
 static void resetAccelerometerTrims(flightDynamicsTrims_t *accelerometerTrims)
 {
@@ -146,9 +153,9 @@ static void resetAccelerometerTrims(flightDynamicsTrims_t *accelerometerTrims)
     accelerometerTrims->values.yaw = 0;
 }
 
-static void resetPidProfile(pidProfile_t *pidProfile)
+void resetPidProfile(pidProfile_t *pidProfile)
 {
-    pidProfile->pidController = 0;
+    pidProfile->pidController = 1;
 
     pidProfile->P8[ROLL] = 40;
     pidProfile->I8[ROLL] = 30;
@@ -180,22 +187,34 @@ static void resetPidProfile(pidProfile_t *pidProfile)
     pidProfile->D8[PIDVEL] = 1;
 
     pidProfile->yaw_p_limit = YAW_P_LIMIT_MAX;
+    pidProfile->gyro_soft_lpf = 0;   // no filtering by default
+    pidProfile->yaw_pterm_cut_hz = 0;
     pidProfile->dterm_cut_hz = 0;
-    pidProfile->pterm_cut_hz = 0;
-    pidProfile->gyro_cut_hz = 0;
 
-    pidProfile->P_f[ROLL] = 1.5f;     // new PID with preliminary defaults test carefully
+    pidProfile->P_f[ROLL] = 1.4f;     // new PID with preliminary defaults test carefully
     pidProfile->I_f[ROLL] = 0.4f;
     pidProfile->D_f[ROLL] = 0.03f;
-    pidProfile->P_f[PITCH] = 1.5f;
+    pidProfile->P_f[PITCH] = 1.4f;
     pidProfile->I_f[PITCH] = 0.4f;
     pidProfile->D_f[PITCH] = 0.03f;
-    pidProfile->P_f[YAW] = 2.5f;
-    pidProfile->I_f[YAW] = 1.0f;
-    pidProfile->D_f[YAW] = 0.00f;
+    pidProfile->P_f[YAW] = 3.5f;
+    pidProfile->I_f[YAW] = 0.4f;
+    pidProfile->D_f[YAW] = 0.01f;
     pidProfile->A_level = 5.0f;
     pidProfile->H_level = 3.0f;
     pidProfile->H_sensitivity = 75;
+
+#ifdef GTUNE
+    pidProfile->gtune_lolimP[ROLL] = 10;          // [0..200] Lower limit of ROLL P during G tune.
+    pidProfile->gtune_lolimP[PITCH] = 10;         // [0..200] Lower limit of PITCH P during G tune.
+    pidProfile->gtune_lolimP[YAW] = 10;           // [0..200] Lower limit of YAW P during G tune.
+    pidProfile->gtune_hilimP[ROLL] = 100;         // [0..200] Higher limit of ROLL P during G tune. 0 Disables tuning for that axis.
+    pidProfile->gtune_hilimP[PITCH] = 100;        // [0..200] Higher limit of PITCH P during G tune. 0 Disables tuning for that axis.
+    pidProfile->gtune_hilimP[YAW] = 100;          // [0..200] Higher limit of YAW P during G tune. 0 Disables tuning for that axis.
+    pidProfile->gtune_pwr = 0;                    // [0..10] Strength of adjustment
+    pidProfile->gtune_settle_time = 450;          // [200..1000] Settle time in ms
+    pidProfile->gtune_average_cycles = 16;        // [8..128] Number of looptime cycles used for gyro average calculation
+#endif
 }
 
 #ifdef GPS
@@ -208,18 +227,6 @@ void resetGpsProfile(gpsProfile_t *gpsProfile)
     gpsProfile->nav_speed_min = 100;
     gpsProfile->nav_speed_max = 300;
     gpsProfile->ap_mode = 40;
-
-
-    // fw stuff
-    gpsProfile->fw_gps_maxcorr = 20;
-    gpsProfile->fw_gps_rudder = 15;
-    gpsProfile->fw_gps_maxclimb = 15;
-    gpsProfile->fw_gps_maxdive = 15;
-    gpsProfile->fw_climb_throttle = 1900;
-    gpsProfile->fw_cruise_throttle = 1500;
-    gpsProfile->fw_idle_throttle = 1300;
-    gpsProfile->fw_scaler_throttle = 8;
-    gpsProfile->fw_roll_comp = 1;
 }
 #endif
 
@@ -394,7 +401,7 @@ static void resetConf(void)
     masterConfig.version = EEPROM_CONF_VERSION;
     masterConfig.mixerMode = MIXER_QUADX;
     featureClearAll();
-#if defined(CJMCU) || defined(SPARKY) || defined(COLIBRI_RACE)
+#if defined(CJMCU) || defined(SPARKY) || defined(COLIBRI_RACE) || defined(MOTOLAB)
     featureSet(FEATURE_RX_PPM);
 #endif
 
@@ -408,9 +415,9 @@ static void resetConf(void)
 
     // global settings
     masterConfig.current_profile_index = 0;     // default profile
-    masterConfig.gyro_cmpf_factor = 600;        // default MWC
-    masterConfig.gyro_cmpfm_factor = 250;       // default MWC
-    masterConfig.gyro_lpf = 42;                 // supported by all gyro drivers now. In case of ST gyro, will default to 32Hz instead
+    masterConfig.dcm_kp = 2500;                // 1.0 * 10000
+    masterConfig.dcm_ki = 0;                   // 0.003 * 10000
+    masterConfig.gyro_lpf = 3;                 // supported by all gyro drivers now. In case of ST gyro, will default to 32Hz instead
 
     resetAccelerometerTrims(&masterConfig.accZero);
 
@@ -486,6 +493,9 @@ static void resetConf(void)
 
     masterConfig.looptime = 3500;
     masterConfig.emf_avoidance = 0;
+    masterConfig.i2c_overclock = 0;
+    masterConfig.gyroSync = 0;
+    masterConfig.gyroSyncDenominator = 1;
 
     resetPidProfile(&currentProfile->pidProfile);
 
@@ -497,15 +507,14 @@ static void resetConf(void)
     resetRollAndPitchTrims(&currentProfile->accelerometerTrims);
 
     currentProfile->mag_declination = 0;
-    currentProfile->acc_lpf_factor = 4;
+    currentProfile->acc_cut_hz = 15;
     currentProfile->accz_lpf_cutoff = 5.0f;
     currentProfile->accDeadband.xy = 40;
     currentProfile->accDeadband.z = 40;
+    currentProfile->acc_unarmedcal = 1;
 
     resetBarometerConfig(&currentProfile->barometerConfig);
     resetPitotmeterConfig(&currentProfile->pitotmeterConfig);
-
-    currentProfile->acc_unarmedcal = 1;
 
     // Radio
     parseRcChannels("AETR1234", &masterConfig.rxConfig);
@@ -521,6 +530,7 @@ static void resetConf(void)
     masterConfig.failsafeConfig.failsafe_throttle = 1000;         // default throttle off.
     masterConfig.failsafeConfig.failsafe_kill_switch = 0;         // default failsafe switch action is identical to rc link loss
     masterConfig.failsafeConfig.failsafe_throttle_low_delay = 100; // default throttle low delay for "just disarm" on failsafe condition
+    masterConfig.failsafeConfig.failsafe_procedure = 0;           // default full failsafe procedure is 0: auto-landing
 
 #ifdef USE_SERVOS
     // servos
@@ -552,14 +562,35 @@ static void resetConf(void)
 #endif
 
 #ifdef BLACKBOX
-#ifdef SPRACINGF3
+#ifdef ENABLE_BLACKBOX_LOGGING_ON_SPIFLASH_BY_DEFAULT
     featureSet(FEATURE_BLACKBOX);
-    masterConfig.blackbox_device = 1;
+    masterConfig.blackbox_device = BLACKBOX_DEVICE_FLASH;
 #else
-    masterConfig.blackbox_device = 0;
+    masterConfig.blackbox_device = BLACKBOX_DEVICE_SERIAL;
 #endif
     masterConfig.blackbox_rate_num = 1;
     masterConfig.blackbox_rate_denom = 1;
+#endif
+
+    // alternative defaults settings for COLIBRI RACE targets
+#if defined(COLIBRI_RACE)
+    masterConfig.looptime = 1000;
+
+    currentProfile->pidProfile.pidController = 1;
+
+    masterConfig.rxConfig.rcmap[0] = 1;
+    masterConfig.rxConfig.rcmap[1] = 2;
+    masterConfig.rxConfig.rcmap[2] = 3;
+    masterConfig.rxConfig.rcmap[3] = 0;
+    masterConfig.rxConfig.rcmap[4] = 4;
+    masterConfig.rxConfig.rcmap[5] = 5;
+    masterConfig.rxConfig.rcmap[6] = 6;
+    masterConfig.rxConfig.rcmap[7] = 7;
+
+    featureSet(FEATURE_ONESHOT125);
+    featureSet(FEATURE_VBAT);
+    featureSet(FEATURE_LED_STRIP);
+    featureSet(FEATURE_FAILSAFE);
 #endif
 
     // alternative defaults settings for ALIENWIIF1 and ALIENWIIF3 targets
@@ -706,7 +737,7 @@ void activateConfig(void)
         &currentProfile->pidProfile
     );
 
-    useGyroConfig(&masterConfig.gyroConfig);
+    useGyroConfig(&masterConfig.gyroConfig, filterGetFIRCoefficientsTable(currentProfile->pidProfile.gyro_soft_lpf, masterConfig.looptime));
 
 #ifdef TELEMETRY
     telemetryUseConfig(&masterConfig.telemetryConfig);
@@ -734,10 +765,10 @@ void activateConfig(void)
         &masterConfig.rxConfig
     );
 
-    imuRuntimeConfig.gyro_cmpf_factor = masterConfig.gyro_cmpf_factor;
-    imuRuntimeConfig.gyro_cmpfm_factor = masterConfig.gyro_cmpfm_factor;
-    imuRuntimeConfig.acc_lpf_factor = currentProfile->acc_lpf_factor;
-    imuRuntimeConfig.acc_unarmedcal = currentProfile->acc_unarmedcal;;
+    imuRuntimeConfig.dcm_kp = masterConfig.dcm_kp / 10000.0f;
+    imuRuntimeConfig.dcm_ki = masterConfig.dcm_ki / 10000.0f;
+    imuRuntimeConfig.acc_cut_hz = currentProfile->acc_cut_hz;
+    imuRuntimeConfig.acc_unarmedcal = currentProfile->acc_unarmedcal;
     imuRuntimeConfig.small_angle = masterConfig.small_angle;
 
     imuConfigure(
@@ -853,6 +884,13 @@ void validateAndFixConfig(void)
 #if defined(CC3D) && defined(SONAR) && defined(USE_SOFTSERIAL1)
     if (feature(FEATURE_SONAR) && feature(FEATURE_SOFTSERIAL)) {
         featureClear(FEATURE_SONAR);
+    }
+#endif
+
+#if defined(COLIBRI_RACE)
+    masterConfig.serialConfig.portConfigs[0].functionMask = FUNCTION_MSP;
+    if(featureConfigured(FEATURE_RX_SERIAL)) {
+	    masterConfig.serialConfig.portConfigs[2].functionMask = FUNCTION_RX_SERIAL;
     }
 #endif
 
@@ -1046,4 +1084,3 @@ uint32_t featureMask(void)
 {
     return masterConfig.enabledFeatures;
 }
-
