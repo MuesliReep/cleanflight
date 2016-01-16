@@ -118,14 +118,14 @@ uartPort_t *serialUSART1(uint32_t baudRate, portMode_t mode, portOptions_t optio
 
     s = &uartPort1;
     s->port.vTable = uartVTable;
-    
+
     s->port.baudRate = baudRate;
-    
+
     s->port.rxBuffer = rx1Buffer;
     s->port.txBuffer = tx1Buffer;
     s->port.rxBufferSize = UART1_RX_BUFFER_SIZE;
     s->port.txBufferSize = UART1_TX_BUFFER_SIZE;
-    
+
     s->USARTx = USART1;
 
     s->txDMAPeripheralBaseAddr = (uint32_t)&s->USARTx->DR;
@@ -168,7 +168,7 @@ uartPort_t *serialUSART1(uint32_t baudRate, portMode_t mode, portOptions_t optio
         }
     }
 
-#if defined(ANYFC)  || defined(REVO)
+#if defined(ANYFC)  || defined(REVO) || defined(NUCLEUS)
     GPIO_PinAFConfig(USART1_GPIO, GPIO_PinSource9, GPIO_AF_USART1);
     GPIO_PinAFConfig(USART1_GPIO, GPIO_PinSource10, GPIO_AF_USART1);
 #endif
@@ -813,5 +813,3 @@ void USART6_IRQHandler(void)
     usartIrqHandler(s);
 }
 #endif
-
-

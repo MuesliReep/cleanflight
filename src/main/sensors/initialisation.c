@@ -208,6 +208,19 @@ const extiConfig_t *selectMPUIntExtiConfig(void)
     return &colibriMPUIntExtiConfig;
 #endif
 
+#if defined(NUCLEUS)
+    static const extiConfig_t nucleusMPUIntExtiConfig = {
+            .gpioAHB1Peripherals = RCC_AHB1Periph_GPIOE,
+            .gpioPort = GPIOE,
+            .gpioPin = Pin_4,
+            .exti_port_source = EXTI_PortSourceGPIOE,
+            .exti_pin_source = EXTI_PinSource4,
+            .exti_line = EXTI_Line4,
+            .exti_irqn = EXTI4_IRQn
+    };
+    return &nucleusMPUIntExtiConfig;
+#endif
+
     return NULL;
 }
 
@@ -781,4 +794,3 @@ bool sensorsAutodetect(sensorAlignmentConfig_t *sensorAlignmentConfig, uint8_t g
 
     return true;
 }
-

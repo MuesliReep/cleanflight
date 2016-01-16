@@ -34,10 +34,10 @@ void initInverter(void)
     } gpio_setup = {
         .gpio = INVERTER_GPIO,
         // configure for Push-Pull
-        .cfg = { INVERTER_PIN, Mode_Out_PP, Speed_2MHz } 
+        .cfg = { INVERTER_PIN, Mode_Out_PP, Speed_2MHz }
     };
 
-#if defined(ANYFC) || defined(COLIBRI) || defined(REVO)
+#if defined(ANYFC) || defined(COLIBRI) || defined(REVO) || defined(NUCLEUS)
     RCC_AHB1PeriphClockCmd(INVERTER_PERIPHERAL, ENABLE);
 #else
     RCC_APB2PeriphClockCmd(INVERTER_PERIPHERAL, ENABLE);

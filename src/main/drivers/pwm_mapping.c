@@ -552,6 +552,34 @@ static const uint16_t airPWM[] = {
 };
 #endif
 
+// TODO:
+#ifdef NUCLEUS
+static const uint16_t multiPPM[] = {
+    PWM1  | (MAP_TO_PPM_INPUT << 8),
+    PWM9  | (MAP_TO_MOTOR_OUTPUT << 8),
+    PWM10 | (MAP_TO_MOTOR_OUTPUT << 8),
+    PWM11 | (MAP_TO_MOTOR_OUTPUT << 8),
+    PWM12 | (MAP_TO_MOTOR_OUTPUT << 8),
+    PWM13 | (MAP_TO_MOTOR_OUTPUT << 8),
+    PWM14 | (MAP_TO_MOTOR_OUTPUT << 8),
+    PWM15 | (MAP_TO_MOTOR_OUTPUT << 8),
+    PWM16 | (MAP_TO_MOTOR_OUTPUT << 8),
+    PWM2  | (MAP_TO_MOTOR_OUTPUT << 8),
+    PWM3  | (MAP_TO_MOTOR_OUTPUT << 8),
+    0xFFFF
+};
+static const uint16_t multiPWM[] = {
+    0xFFFF
+};
+
+static const uint16_t airPPM[] = {
+    0xFFFF
+};
+
+static const uint16_t airPWM[] = {
+    0xFFFF
+};
+#endif
 
 #ifdef SPRACINGF3
 static const uint16_t multiPPM[] = {
@@ -844,7 +872,7 @@ pwmOutputConfiguration_t *pwmInit(drv_pwm_config_t *init)
         if (init->useChannelForwarding && !init->airplane) {
 #if defined(NAZE) && defined(LED_STRIP_TIMER)
             // if LED strip is active, PWM5-8 are unavailable, so map AUX1+AUX2 to PWM13+PWM14
-            if (init->useLEDStrip) { 
+            if (init->useLEDStrip) {
                 if (timerIndex >= PWM13 && timerIndex <= PWM14) {
                   type = MAP_TO_SERVO_OUTPUT;
                 }

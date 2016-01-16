@@ -35,7 +35,7 @@ FLASH_SIZE ?=
 
 FORKNAME			 = cleanflightF4
 
-VALID_TARGETS	 = ALIENWIIF1 ALIENWIIF3 CC3D CHEBUZZF3 CJMCU COLIBRI_RACE EUSTM32F103RC MOTOLAB NAZE NAZE32PRO OLIMEXINO PORT103R RMDO SPARKY SPRACINGF3 STM32F3DISCOVERY 
+VALID_TARGETS	 = ALIENWIIF1 ALIENWIIF3 CC3D CHEBUZZF3 CJMCU COLIBRI_RACE EUSTM32F103RC MOTOLAB NAZE NAZE32PRO OLIMEXINO PORT103R RMDO SPARKY SPRACINGF3 STM32F3DISCOVERY
 VALID_TARGETS	 += ANYFC REVO COLIBRI NUCLEUS
 
 # Configure default flash sizes for the targets
@@ -48,7 +48,7 @@ else ifeq ($(TARGET),$(filter $(TARGET),ALIENWIIF3 CHEBUZZF3 COLIBRI_RACE EUSTM3
 FLASH_SIZE = 256
 else ifeq ($(TARGET),$(filter $(TARGET),ANYFC REVO COLIBRI))
 FLASH_SIZE = 256
-else ifeq($(TARGET),$(filter $(TARGET),NUCLEUS))
+else ifeq ($(TARGET),$(filter $(TARGET),NUCLEUS))
 FLASE_SIZE = 1024
 else
 $(error FLASH_SIZE not configured for target)
@@ -147,7 +147,7 @@ EXCLUDES	= usb_bsp_template.c \
 		usb_hcd_int.c \
 		usb_hcd.c \
 		usb_otg.c
-		
+
 USBOTG_SRC := $(filter-out ${EXCLUDES}, $(USBOTG_SRC))
 
 USBCDC_DIR	= $(ROOT)/lib/main/STM32_USB_Device_Library/Class/cdc
@@ -160,7 +160,7 @@ VPATH := $(VPATH):$(USBOTG_DIR)/src:$(USBCORE_DIR)/src:$(USBCDC_DIR)/src
 DEVICE_STDPERIPH_SRC := $(STDPERIPH_SRC) \
 		   $(USBOTG_SRC) \
 		   $(USBCORE_SRC) \
-		   $(USBCDC_SRC) 
+		   $(USBCDC_SRC)
 
 VPATH		:= $(VPATH):$(CMSIS_DIR)/CM1/CoreSupport:$(CMSIS_DIR)/CM1/DeviceSupport/ST/STM32F4xx
 CMSIS_SRC	 = $(notdir $(wildcard $(CMSIS_DIR)/CM1/CoreSupport/*.c \
@@ -194,7 +194,7 @@ LD_SCRIPT	 = $(LINKER_DIR)/stm32_flash_f405_bl.ld
 endif
 ifeq ($(TARGET),NUCLEUS)
 DEVICE_FLAGS += -DHSE_VALUE=12000000
-LD_SCRIPT	 = $(LINKER_DIR)/stm32_flash_f407.ld
+LD_SCRIPT	 = $(LINKER_DIR)/stm32_flash_f407_1024k.ld
 .DEFAULT_GOAL := binary
 endif
 TARGET_FLAGS = -D$(TARGET)
@@ -644,8 +644,8 @@ REVO_SRC = startup_stm32f40xx.s \
 		   $(HIGHEND_SRC) \
 		   $(COMMON_SRC) \
 		   $(VCPF4_SRC)
-		   
-NUCLUES_SRC = startup_stm32f40xx.s \
+
+NUCLEUS_SRC = startup_stm32f40xx.s \
 		   drivers/accgyro_spi_mpu6000.c \
 		   drivers/barometer_ms5611.c \
 		   drivers/compass_hmc5883l.c \
@@ -669,7 +669,7 @@ NUCLUES_SRC = startup_stm32f40xx.s \
 		   io/flashfs.c \
 		   $(HIGHEND_SRC) \
 		   $(COMMON_SRC) \
-		   $(VCPF4_SRC)		   
+		   $(VCPF4_SRC)
 
 STM32F30x_COMMON_SRC = \
 		   startup_stm32f30x_md_gcc.S \
