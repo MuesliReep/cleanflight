@@ -49,7 +49,7 @@ FLASH_SIZE = 256
 else ifeq ($(TARGET),$(filter $(TARGET),ANYFC REVO COLIBRI))
 FLASH_SIZE = 256
 else ifeq ($(TARGET),$(filter $(TARGET),NUCLEUS))
-FLASE_SIZE = 1024
+FLASH_SIZE = 1024
 else
 $(error FLASH_SIZE not configured for target)
 endif
@@ -646,6 +646,7 @@ REVO_SRC = startup_stm32f40xx.s \
 		   $(VCPF4_SRC)
 
 NUCLEUS_SRC = startup_stm32f40xx.s \
+			 drivers/accgyro_mpu.c \
 		   drivers/accgyro_spi_mpu6000.c \
 		   drivers/barometer_ms5611.c \
 		   drivers/compass_hmc5883l.c \
