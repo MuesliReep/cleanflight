@@ -330,25 +330,24 @@ const timerHardware_t timerHardware[USABLE_TIMER_CHANNEL_COUNT] = {
 #if defined(NUCLEUS)
 // NUCLEUS TODO:
 const timerHardware_t timerHardware[USABLE_TIMER_CHANNEL_COUNT] = {
-    { TIM4, GPIOX, Pin_X, TIM_Channel_4, TIM4_CC_IRQn, 0, GPIO_Mode_AF, GPIO_PinSource14, GPIO_AF_TIM12},  // In
+    { TIM4, GPIOD, Pin_15, TIM_Channel_4, TIM4_IRQn, 0, GPIO_Mode_AF, GPIO_PinSource15, GPIO_AF_TIM4},  // PPM In
 
-    { TIM12, GPIOB, Pin_15, TIM_Channel_2, TIM8_BRK_TIM12_IRQn, 0, GPIO_Mode_AF, GPIO_PinSource15, GPIO_AF_TIM12}, // MOT1
-    { TIM8, GPIOC, Pin_6, TIM_Channel_1, TIM8_CC_IRQn, 0, GPIO_Mode_AF, GPIO_PinSource6, GPIO_AF_TIM8}, // MOT2
-    { TIM8, GPIOC, Pin_7, TIM_Channel_2, TIM8_CC_IRQn, 0, GPIO_Mode_AF, GPIO_PinSource7, GPIO_AF_TIM8}, // MOT3
-    { TIM8, GPIOC, Pin_8, TIM_Channel_3, TIM8_CC_IRQn, 0, GPIO_Mode_AF, GPIO_PinSource8, GPIO_AF_TIM8}, // MOT4
-    { TIM8, GPIOC, Pin_9, TIM_Channel_4, TIM8_CC_IRQn, 0, GPIO_Mode_AF, GPIO_PinSource9, GPIO_AF_TIM8}, // MOT5
-
-    { TIM3, GPIOB, Pin_0, TIM_Channel_3, TIM3_IRQn, 1, GPIO_Mode_AF, GPIO_PinSource0, GPIO_AF_TIM3},    // MOT6
-    { TIM3, GPIOB, Pin_1, TIM_Channel_4, TIM3_IRQn, 1, GPIO_Mode_AF, GPIO_PinSource1, GPIO_AF_TIM3},    // MOT7
-    { TIM9, GPIOA, Pin_3, TIM_Channel_2, TIM1_BRK_TIM9_IRQn, 1, GPIO_Mode_AF, GPIO_PinSource3, GPIO_AF_TIM9},    // MOT8
-    { TIM2, GPIOA, Pin_2, TIM_Channel_3, TIM2_IRQn, 1, GPIO_Mode_AF, GPIO_PinSource2, GPIO_AF_TIM2}, // MOT9
-    { TIM5, GPIOA, Pin_1, TIM_Channel_2, TIM5_IRQn, 1, GPIO_Mode_AF, GPIO_PinSource1, GPIO_AF_TIM5},    // MOT10
+    { TIM8, GPIOC, Pin_9, TIM_Channel_4, TIM8_CC_IRQn, 1, GPIO_Mode_AF, GPIO_PinSource9, GPIO_AF_TIM8}, // MOT1
+    { TIM8, GPIOC, Pin_8, TIM_Channel_3, TIM8_CC_IRQn, 1, GPIO_Mode_AF, GPIO_PinSource8, GPIO_AF_TIM8}, // MOT2
+    { TIM8, GPIOC, Pin_7, TIM_Channel_2, TIM8_CC_IRQn, 1, GPIO_Mode_AF, GPIO_PinSource7, GPIO_AF_TIM8}, // MOT3
+    { TIM8, GPIOC, Pin_6, TIM_Channel_1, TIM8_CC_IRQn, 1, GPIO_Mode_AF, GPIO_PinSource6, GPIO_AF_TIM8}, // MOT4
+    { TIM2, GPIOA, Pin_15, TIM_Channel_1, TIM2_IRQn, 1, GPIO_Mode_AF, GPIO_PinSource15, GPIO_AF_TIM2}, // MOT5
+    { TIM2, GPIOB, Pin_3, TIM_Channel_2, TIM2_IRQn, 1, GPIO_Mode_AF, GPIO_PinSource3, GPIO_AF_TIM2}, // MOT6
+    { TIM3, GPIOB, Pin_4, TIM_Channel_1, TIM3_IRQn, 1, GPIO_Mode_AF, GPIO_PinSource4, GPIO_AF_TIM3}, // MOT7
+    { TIM3, GPIOB, Pin_5, TIM_Channel_2, TIM3_IRQn, 1, GPIO_Mode_AF, GPIO_PinSource5, GPIO_AF_TIM3}, // MOT8
+    { TIM5, GPIOA, Pin_0, TIM_Channel_1, TIM5_IRQn, 1, GPIO_Mode_AF, GPIO_PinSource0, GPIO_AF_TIM5}, // MOT9
+    { TIM5, GPIOA, Pin_1, TIM_Channel_2, TIM5_IRQn, 1, GPIO_Mode_AF, GPIO_PinSource1, GPIO_AF_TIM5}, // MOT10
 };
 // NUCLEUS TODO:
-#define USED_TIMERS  ( TIM_N(2) | TIM_N(3) | TIM_N(5) | TIM_N(12) | TIM_N(8) | TIM_N(9))
+#define USED_TIMERS  ( TIM_N(2) | TIM_N(3) | TIM_N(4) | TIM_N(5) | TIM_N(8))
 // NUCLEUS TODO:
-#define TIMER_APB1_PERIPHERALS (RCC_APB1Periph_TIM2 | RCC_APB1Periph_TIM3 | RCC_APB1Periph_TIM5 | RCC_APB1Periph_TIM12 | RCC_AHB1Periph_GPIOA | RCC_AHB1Periph_GPIOB | RCC_AHB1Periph_GPIOC)
-#define TIMER_APB2_PERIPHERALS (RCC_APB2Periph_TIM8 | RCC_APB2Periph_TIM9)
+#define TIMER_APB1_PERIPHERALS (RCC_APB1Periph_TIM2 | RCC_APB1Periph_TIM3 | RCC_APB1Periph_TIM5 | RCC_AHB1Periph_GPIOA | RCC_AHB1Periph_GPIOB | RCC_AHB1Periph_GPIOC)
+#define TIMER_APB2_PERIPHERALS (RCC_APB2Periph_TIM8)
 
 #endif
 
